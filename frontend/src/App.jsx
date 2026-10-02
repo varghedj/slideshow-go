@@ -11,7 +11,6 @@ import {
   CssBaseline,
   CircularProgress,
   Tooltip,
-  Chip,
 } from '@mui/material';
 import {
   PlayArrow,
@@ -26,6 +25,8 @@ import {
   MotionPhotosOff,
   Add,
   Remove,
+  ContentCopy,
+  Check,
 } from '@mui/icons-material';
 
 import { SelectDirectory, ReadImage, ToggleFullscreen, ExitFullscreen } from '../wailsjs/go/main/App';
@@ -37,7 +38,7 @@ const muiTheme = createTheme({
     mode: 'dark',
     primary: { main: '#a8c7fa' },
     secondary: { main: '#c4eca8' },
-    background: { default: '#000000', paper: 'rgba(20, 21, 25, 0.35)' },
+    background: { default: '#000000', paper: 'rgba(20, 21, 25, 0.16)' },
   },
   shape: { borderRadius: 28 },
 });
@@ -77,15 +78,37 @@ export default function App() {
   const [transitionsEnabled, setTransitionsEnabled] = useState(true);
   const [imgKey, setImgKey] = useState(0);
 
+  // Copy path feedback state
+  const [copied, setCopied] = useState(false);
+
   // Full-screen controls auto-fade state & timer ref
   const [isControlsVisible, setIsControlsVisible] = useState(true);
   const idleTimerRef = useRef(null);
+  
+  // Ref tracking full-screen state to prevent stale closure bugs in keyboard shortcuts & callbacks
+  const isFullscreenRef = useRef(false);
+  useEffect(() => {
+    isFullscreenRef.current = isFullscreen;
+  }, [isFullscreen]);
 
   // Derive current original image index and filepath
   const currentOriginalIndex = playOrder.length > 0 ? playOrder[playIndex] : 0;
   const currentFilePath = rawPaths[currentOriginalIndex] || '';
+  const currentFileName = currentFilePath ? currentFilePath.split(/[/\\]/).pop() : '';
 
-  // Mouse activity detector: resets 500ms timer in full-screen mode
+  // Copy current filepath to system clipboard
+  const handleCopyPath = async () => {
+    if (!currentFilePath) return;
+    try {
+      await navigator.clipboard.writeText(currentFilePath);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy file path:', err);
+    }
+  };
+
+  // Activity detector: resets 500ms timer in full-screen mode
   const handleMouseMove = useCallback(() => {
     setIsControlsVisible(true);
 
@@ -93,12 +116,12 @@ export default function App() {
       clearTimeout(idleTimerRef.current);
     }
 
-    if (isFullscreen) {
+    if (isFullscreenRef.current) {
       idleTimerRef.current = setTimeout(() => {
         setIsControlsVisible(false);
       }, 500); // 0.5 seconds idle timeout
     }
-  }, [isFullscreen]);
+  }, []);
 
   // Clean up timer when exiting full-screen mode
   useEffect(() => {
@@ -228,7 +251,7 @@ export default function App() {
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
-      handleMouseMove(); // Reveal controls on keystroke
+      handleMouseMove();
 
       if (e.key === 'ArrowRight') handleNext();
       if (e.key === 'ArrowLeft') handlePrev();
@@ -237,7 +260,7 @@ export default function App() {
         setIsPlaying((prev) => !prev);
       }
       if (e.key === 'f' || e.key === 'F') handleToggleFullscreen();
-      if (e.key === 'Escape' && isFullscreen) {
+      if (e.key === 'Escape' && isFullscreenRef.current) {
         ExitFullscreen();
         setIsFullscreen(false);
       }
@@ -262,7 +285,6 @@ export default function App() {
     handlePrev,
     handleToggleShuffle,
     handleMouseMove,
-    isFullscreen,
     handleIncreaseInterval,
     handleDecreaseInterval,
   ]);
@@ -272,40 +294,17 @@ export default function App() {
       <CssBaseline />
       <Box
         onMouseMove={handleMouseMove}
-        sx={{
-          width: '100vw',
-          height: '100vh',
-          backgroundColor: '#000000',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-          position: 'relative',
-          cursor: isFullscreen && !isControlsVisible ? 'none' : 'default',
-        }}
+        className={`app-container ${isFullscreen && !isControlsVisible ? 'cursor-hidden' : ''}`}
       >
         {/* Main Viewport */}
-        <Box
-          sx={{
-            flex: 1,
-            width: '100%',
-            height: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            position: 'relative',
-          }}
-        >
-          {loading && (
-            <CircularProgress
-              sx={{ position: 'absolute', zIndex: 2, color: 'primary.main' }}
-            />
-          )}
+        <Box className="main-viewport">
+          {loading && <CircularProgress className="loading-spinner" />}
 
           {rawPaths.length > 0 ? (
             <img
               key={transitionsEnabled ? `slide-${imgKey}` : 'static-slide'}
               src={currentSrc}
-              alt={`Slide ${currentOriginalIndex + 1}`}
+              alt={currentFileName || 'Slide'}
               className={`slideshow-image ${transitionsEnabled ? 'fade-active' : ''}`}
             />
           ) : (
@@ -314,56 +313,35 @@ export default function App() {
               startIcon={<FolderOpen />}
               onClick={handleLoadFolder}
               size="large"
-              sx={{ borderRadius: 8, px: 4, py: 1.8, fontSize: '1.1rem' }}
+              className="select-folder-btn"
             >
               Select Image Directory
             </Button>
           )}
         </Box>
 
-        {/* More Transparent Frosted Glass Floating Toolbar */}
+        {/* Transparent Frosted Glass Floating Toolbar */}
         <Paper
           elevation={0}
-          sx={{
-            position: 'absolute',
-            bottom: 24,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            p: 1.5,
-            px: 3,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2,
-            borderRadius: 10,
-            backgroundColor: 'rgba(20, 21, 25, 0.35)',
-            backdropFilter: 'blur(20px) saturate(160%)',
-            WebkitBackdropFilter: 'blur(20px) saturate(160%)',
-            border: '1px solid rgba(255, 255, 255, 0.18)',
-            boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
-            zIndex: 10,
-            transition: 'opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease',
-            opacity: isFullscreen && !isControlsVisible ? 0 : 1,
-            pointerEvents: isFullscreen && !isControlsVisible ? 'none' : 'auto',
-            visibility: isFullscreen && !isControlsVisible ? 'hidden' : 'visible',
-          }}
+          className={`floating-toolbar ${isFullscreen && !isControlsVisible ? 'toolbar-hidden' : ''}`}
         >
           {/* Open Directory */}
           <Tooltip title="Open Directory">
             <Button
-              variant="outlined"
+              variant="contained"
               startIcon={<FolderOpen />}
               onClick={handleLoadFolder}
-              sx={{ borderRadius: 6, borderColor: 'rgba(255, 255, 255, 0.25)' }}
+              className="folder-btn"
             >
               Folder
             </Button>
           </Tooltip>
 
           {/* Playback Controls */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Box className="control-group">
             <Tooltip title="Previous Image (Left Arrow)">
               <span>
-                <IconButton onClick={handlePrev} disabled={!rawPaths.length}>
+                <IconButton onClick={handlePrev} disabled={!rawPaths.length} className="nav-btn">
                   <SkipPrevious />
                 </IconButton>
               </span>
@@ -373,9 +351,8 @@ export default function App() {
               <span>
                 <IconButton
                   onClick={() => setIsPlaying(!isPlaying)}
-                  color="primary"
                   disabled={!rawPaths.length}
-                  sx={{ backgroundColor: 'rgba(168, 199, 250, 0.25)', mx: 0.5 }}
+                  className="play-pause-btn"
                 >
                   {isPlaying ? <Pause /> : <PlayArrow />}
                 </IconButton>
@@ -384,7 +361,7 @@ export default function App() {
 
             <Tooltip title="Next Image (Right Arrow)">
               <span>
-                <IconButton onClick={handleNext} disabled={!rawPaths.length}>
+                <IconButton onClick={handleNext} disabled={!rawPaths.length} className="nav-btn">
                   <SkipNext />
                 </IconButton>
               </span>
@@ -399,12 +376,7 @@ export default function App() {
               startIcon={<Shuffle />}
               onClick={handleToggleShuffle}
               disabled={!rawPaths.length}
-              sx={{
-                borderRadius: 6,
-                textTransform: 'none',
-                px: 2,
-                borderColor: 'rgba(255, 255, 255, 0.25)',
-              }}
+              className="pill-btn"
             >
               Shuffle {isShuffle ? 'ON' : 'OFF'}
             </Button>
@@ -417,32 +389,28 @@ export default function App() {
               color={transitionsEnabled ? 'primary' : 'inherit'}
               startIcon={transitionsEnabled ? <AutoAwesome /> : <MotionPhotosOff />}
               onClick={() => setTransitionsEnabled((prev) => !prev)}
-              sx={{
-                borderRadius: 6,
-                textTransform: 'none',
-                px: 2,
-                borderColor: 'rgba(255, 255, 255, 0.25)',
-              }}
+              className="pill-btn"
             >
               Transitions {transitionsEnabled ? 'ON' : 'OFF'}
             </Button>
           </Tooltip>
 
           {/* Duration Controls (+ / - & Slider) */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Box className="control-group">
             <Tooltip title="Decrease interval by 1s (- / Down Arrow)">
               <span>
                 <IconButton
                   size="small"
                   onClick={handleDecreaseInterval}
                   disabled={intervalSec <= 1}
+                  className="step-btn"
                 >
                   <Remove fontSize="small" />
                 </IconButton>
               </span>
             </Tooltip>
 
-            <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 28, textAlign: 'center' }}>
+            <Typography variant="body2" className="interval-label">
               {intervalSec}s
             </Typography>
 
@@ -452,6 +420,7 @@ export default function App() {
                   size="small"
                   onClick={handleIncreaseInterval}
                   disabled={intervalSec >= 60}
+                  className="step-btn"
                 >
                   <Add fontSize="small" />
                 </IconButton>
@@ -464,31 +433,37 @@ export default function App() {
               max={30}
               onChange={(_, val) => setIntervalSec(val)}
               valueLabelDisplay="auto"
-              sx={{ width: 60, ml: 1 }}
+              className="duration-slider"
             />
           </Box>
 
           {/* Fullscreen Toggle */}
           <Tooltip title="Toggle Fullscreen (F / Esc)">
-            <IconButton onClick={handleToggleFullscreen}>
+            <IconButton onClick={handleToggleFullscreen} className="icon-action-btn">
               {isFullscreen ? <FullscreenExit /> : <Fullscreen />}
             </IconButton>
           </Tooltip>
 
-          {/* Slide Index Counter */}
+          {/* Filename & Copy Filepath Action */}
           {rawPaths.length > 0 && (
-            <Chip
-              label={`${currentOriginalIndex + 1} / ${rawPaths.length}`}
-              variant="outlined"
-              size="small"
-              color={isShuffle ? 'secondary' : 'default'}
-              sx={{
-                fontWeight: 600,
-                ml: 0.5,
-                borderColor: 'rgba(255, 255, 255, 0.25)',
-                backgroundColor: 'rgba(255, 255, 255, 0.08)',
-              }}
-            />
+            <Box className="filename-container">
+              <Tooltip title={currentFilePath} arrow placement="top">
+                <Typography variant="body2" noWrap className="filename-text">
+                  {currentFileName}
+                </Typography>
+              </Tooltip>
+
+              <Tooltip title={copied ? 'Copied Path!' : 'Copy Full Path'} arrow placement="top">
+                <IconButton
+                  size="small"
+                  onClick={handleCopyPath}
+                  color={copied ? 'success' : 'default'}
+                  className="icon-action-btn"
+                >
+                  {copied ? <Check fontSize="small" /> : <ContentCopy fontSize="small" />}
+                </IconButton>
+              </Tooltip>
+            </Box>
           )}
         </Paper>
       </Box>
