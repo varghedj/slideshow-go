@@ -43,10 +43,6 @@ const muiTheme = createTheme({
   shape: { borderRadius: 28 },
 });
 
-/**
- * Generates a randomized permutation of array indices [0 ... length-1].
- * Optionally places `pinOriginalIndex` at index 0 so the initial image doesn't jump immediately.
- */
 const createShuffleSequence = (length, pinOriginalIndex = -1) => {
   const indices = Array.from({ length }, (_, i) => i);
   for (let i = indices.length - 1; i > 0; i--) {
@@ -66,7 +62,7 @@ const createShuffleSequence = (length, pinOriginalIndex = -1) => {
 
 export default function App() {
   const [rawPaths, setRawPaths] = useState([]);
-  const [isShuffle, setIsShuffle] = useState(true); // Enabled by default
+  const [isShuffle, setIsShuffle] = useState(true);
   const [playOrder, setPlayOrder] = useState([]);
   const [playIndex, setPlayIndex] = useState(0);
 
@@ -81,22 +77,80 @@ export default function App() {
   // Copy path feedback state
   const [copied, setCopied] = useState(false);
 
-  // Full-screen controls auto-fade state & timer ref
+  // Toolbar visibility & hover tracking
   const [isControlsVisible, setIsControlsVisible] = useState(true);
+  const [isToolbarHovered, setIsToolbarHovered] = useState(false);
+  const [isWindowFocused, setIsWindowFocused] = useState(true);
+
   const idleTimerRef = useRef(null);
-  
-  // Ref tracking full-screen state to prevent stale closure bugs in keyboard shortcuts & callbacks
+  const isToolbarHoveredRef = useRef(false);
+
+  // Keep ref in sync with state for timer callbacks
+  useEffect(() => {
+    isToolbarHoveredRef.current = isToolbarHovered;
+  }, [isToolbarHovered]);
+
+  // Ref tracking full-screen state
   const isFullscreenRef = useRef(false);
   useEffect(() => {
     isFullscreenRef.current = isFullscreen;
   }, [isFullscreen]);
 
-  // Derive current original image index and filepath
+  // Derive current image details
   const currentOriginalIndex = playOrder.length > 0 ? playOrder[playIndex] : 0;
   const currentFilePath = rawPaths[currentOriginalIndex] || '';
   const currentFileName = currentFilePath ? currentFilePath.split(/[/\\]/).pop() : '';
 
-  // Copy current filepath to system clipboard
+  // Handle window focus / blur
+  useEffect(() => {
+    const handleFocus = () => setIsWindowFocused(true);
+    const handleBlur = () => {
+      setIsWindowFocused(false);
+      setIsToolbarHovered(false);
+      setIsControlsVisible(false);
+    };
+
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('blur', handleBlur);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, []);
+
+  // Global mouse movement handler: shows toolbar on movement, fades after 2s of idle
+  const handleMouseMove = useCallback(() => {
+    if (!isWindowFocused) return;
+
+    setIsControlsVisible(true);
+
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+
+    // Only start idle timer if mouse is NOT directly hovering over the toolbar
+    idleTimerRef.current = setTimeout(() => {
+      if (!isToolbarHoveredRef.current) {
+        setIsControlsVisible(false);
+      }
+    }, 2000);
+  }, [isWindowFocused]);
+
+  // Hover handlers for toolbar bounds
+  const handleToolbarMouseEnter = () => {
+    setIsToolbarHovered(true);
+    setIsControlsVisible(true);
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+  };
+
+  const handleToolbarMouseLeave = () => {
+    setIsToolbarHovered(false);
+    // Restart idle countdown when leaving toolbar bounds
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    idleTimerRef.current = setTimeout(() => {
+      setIsControlsVisible(false);
+    }, 1500);
+  };
+
+  // Copy current filepath
   const handleCopyPath = async () => {
     if (!currentFilePath) return;
     try {
@@ -108,35 +162,7 @@ export default function App() {
     }
   };
 
-  // Activity detector: resets 500ms timer in full-screen mode
-  const handleMouseMove = useCallback(() => {
-    setIsControlsVisible(true);
-
-    if (idleTimerRef.current) {
-      clearTimeout(idleTimerRef.current);
-    }
-
-    if (isFullscreenRef.current) {
-      idleTimerRef.current = setTimeout(() => {
-        setIsControlsVisible(false);
-      }, 500); // 0.5 seconds idle timeout
-    }
-  }, []);
-
-  // Clean up timer when exiting full-screen mode
-  useEffect(() => {
-    if (!isFullscreen) {
-      setIsControlsVisible(true);
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    } else {
-      handleMouseMove();
-    }
-    return () => {
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    };
-  }, [isFullscreen, handleMouseMove]);
-
-  // Fetch Base64 data whenever current file path updates
+  // Fetch image base64
   useEffect(() => {
     if (!currentFilePath) return;
 
@@ -161,7 +187,7 @@ export default function App() {
     };
   }, [currentFilePath]);
 
-  // Open directory, pick a random starting image, and start playback
+  // Folder loader
   const handleLoadFolder = async () => {
     try {
       const paths = await SelectDirectory();
@@ -169,7 +195,6 @@ export default function App() {
         setRawPaths(paths);
         setIsPlaying(true);
 
-        // Pick a random starting image index
         const startIdx = Math.floor(Math.random() * paths.length);
 
         if (isShuffle) {
@@ -185,7 +210,7 @@ export default function App() {
     }
   };
 
-  // Toggle between Shuffle mode and Sequential mode
+  // Shuffle toggle
   const handleToggleShuffle = useCallback(() => {
     if (rawPaths.length === 0) return;
 
@@ -202,7 +227,7 @@ export default function App() {
     }
   }, [isShuffle, rawPaths.length, currentOriginalIndex]);
 
-  // Next Image navigation
+  // Next image
   const handleNext = useCallback(() => {
     if (playOrder.length === 0) return;
 
@@ -219,7 +244,7 @@ export default function App() {
     }
   }, [playIndex, playOrder.length, isShuffle, rawPaths.length]);
 
-  // Previous Image navigation
+  // Previous image
   const handlePrev = useCallback(() => {
     if (playOrder.length === 0) return;
     setPlayIndex((prev) => (prev - 1 + playOrder.length) % playOrder.length);
@@ -239,7 +264,7 @@ export default function App() {
     setIntervalSec((prev) => Math.min(60, prev + 1));
   }, []);
 
-  // Slideshow interval timer
+  // Interval timer
   useEffect(() => {
     let timer;
     if (isPlaying && rawPaths.length > 0) {
@@ -248,11 +273,9 @@ export default function App() {
     return () => clearInterval(timer);
   }, [isPlaying, intervalSec, rawPaths.length, handleNext]);
 
-  // Global Keyboard Shortcuts
+  // Global Keyboard Shortcuts (Do NOT invoke handleMouseMove)
   useEffect(() => {
     const handleKeyDown = (e) => {
-      handleMouseMove();
-
       if (e.key === 'ArrowRight') handleNext();
       if (e.key === 'ArrowLeft') handlePrev();
       if (e.key === ' ') {
@@ -284,17 +307,19 @@ export default function App() {
     handleNext,
     handlePrev,
     handleToggleShuffle,
-    handleMouseMove,
     handleIncreaseInterval,
     handleDecreaseInterval,
   ]);
+
+  // Determine final visible state
+  const shouldDisplayToolbar = isWindowFocused && (isControlsVisible || isToolbarHovered);
 
   return (
     <ThemeProvider theme={muiTheme}>
       <CssBaseline />
       <Box
         onMouseMove={handleMouseMove}
-        className={`app-container ${isFullscreen && !isControlsVisible ? 'cursor-hidden' : ''}`}
+        className={`app-container ${!shouldDisplayToolbar ? 'cursor-hidden' : ''}`}
       >
         {/* Main Viewport */}
         <Box className="main-viewport">
@@ -320,10 +345,12 @@ export default function App() {
           )}
         </Box>
 
-        {/* Transparent Frosted Glass Floating Toolbar */}
+        {/* Floating Toolbar */}
         <Paper
           elevation={0}
-          className={`floating-toolbar ${isFullscreen && !isControlsVisible ? 'toolbar-hidden' : ''}`}
+          onMouseEnter={handleToolbarMouseEnter}
+          onMouseLeave={handleToolbarMouseLeave}
+          className={`floating-toolbar ${shouldDisplayToolbar ? 'visible' : 'hidden'}`}
         >
           {/* Open Directory */}
           <Tooltip title="Open Directory">
@@ -395,7 +422,7 @@ export default function App() {
             </Button>
           </Tooltip>
 
-          {/* Duration Controls (+ / - & Slider) */}
+          {/* Duration Controls */}
           <Box className="control-group">
             <Tooltip title="Decrease interval by 1s (- / Down Arrow)">
               <span>
