@@ -1,10 +1,13 @@
-# Material Slideshow
+# ==============================================================================
+# Formatting Rules
+# ==============================================================================
 
 A lightweight, modern desktop slideshow application built with **Wails**, **Go**, and **React** (Material Design 3 / MUI). Features full-screen idle auto-fading controls, customizable slide duration, dynamic shuffle playlists, and configurable transition effects.
 
 ---
-
-## Key Features & Default Behaviors
+# ==============================================================================
+# Key Features & Default Behaviors
+# ==============================================================================
 
 * **Default Shuffle & Random Start:** Launching a directory picks a random starting image and automatically shuffles the playlist.
 * **Auto-Hiding Toolbar:** In full-screen mode, moving the cursor or pressing any key reveals the floating control bar, which automatically fades out after 0.5 seconds of inactivity.
@@ -13,8 +16,9 @@ A lightweight, modern desktop slideshow application built with **Wails**, **Go**
 * **Filename & Path Access:** Displays the active image filename directly in the floating toolbar, with a single-click action to copy the full file path to your clipboard.
 
 ---
-
-## Key Controls & Shortcuts
+# ==============================================================================
+# Key Controls & Shortcuts
+# ==============================================================================
 
 | Action                 | Keyboard Shortcut        | UI Control      | Description                                        |
 | :--------------------- | :----------------------- | :-------------- | :------------------------------------------------- |
@@ -32,7 +36,6 @@ A lightweight, modern desktop slideshow application built with **Wails**, **Go**
 | **Copy File Path**     | —                        | Copy Button     | Copies the current image's full path to clipboard  |
 
 ---
-
 ## Branch Naming Convention
 
 To maintain a clean and structured Git history, all branches should follow this standard naming structure:
@@ -40,8 +43,10 @@ To maintain a clean and structured Git history, all branches should follow this 
 <type>/<short-description>
 
 ---
+# ==============================================================================
+# Formatting Rules
+# ==============================================================================
 
-## Formatting Rules
 1. Category Prefixes: Use one of the standard prefixes below followed by a forward slash (/).
 
 2. Kebab-case: Use lowercase letters separated by hyphens (e.g., feat/filename-display). Avoid spaces, underscores, or camelCase.
@@ -57,3 +62,37 @@ To maintain a clean and structured Git history, all branches should follow this 
 | docs/             | Documentation updates (e.g., updating README or inline docs)      | docs/branch-naming-guide     |
 | chore/            | Build configuration, dependency updates, or project setup tasks   | chore/wails-build-config     |
 +-------------------+-------------------------------------------------------------------+------------------------------+
+
+---
+# ==============================================================================
+# COMPLETE GITHUB CLI WORKFLOW: FEATURE BRANCH TO MERGED MAIN
+# ==============================================================================
+
+# Step 1: Ensure main branch is up to date
+git checkout main
+git pull origin main
+
+# Step 2: Create and switch to a new feature branch
+# (Using convention: <type>/<short-description>)
+git checkout -b feat/add-filename-display
+
+# Step 3: Stage and commit your changes
+git add .
+git commit -m "feat: add filename display to toolbar"
+
+# Step 4: Push branch to GitHub and set upstream tracking
+git push -u origin feat/add-filename-display
+
+# Step 5: Create a Pull Request via GitHub CLI
+gh pr create --title "feat: add filename display" --body "Adds filename display to floating toolbar with copy-to-clipboard action."
+
+# Step 6: (Optional) Check PR status and verify status checks/CI build
+gh pr status
+gh pr checks
+
+# Step 7: Merge the PR and delete both remote and local feature branches
+gh pr merge --squash --delete-branch
+
+# Step 8: Switch back to main and pull the merged changes
+git checkout main
+git pull origin main
