@@ -7,6 +7,9 @@ import (
 	"mime"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -24,7 +27,39 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 }
 
-// SelectDirectory recursively scans a selected folder and all subdirectories for images
+// naturalLess compares two strings using natural human ordering (e.g., "jane (2)" < "jane (10)")
+func naturalLess(s1, s2 string) bool {
+	re := regexp.MustCompile(`(\d+|\D+)`)
+	chunks1 := re.FindAllString(s1, -1)
+	chunks2 := re.FindAllString(s2, -1)
+
+	minLen := len(chunks1)
+	if len(chunks2) < minLen {
+		minLen = len(chunks2)
+	}
+
+	for i := 0; i < minLen; i++ {
+		c1, c2 := chunks1[i], chunks2[i]
+
+		n1, err1 := strconv.Atoi(c1)
+		n2, err2 := strconv.Atoi(c2)
+
+		if err1 == nil && err2 == nil {
+			if n1 != n2 {
+				return n1 < n2
+			}
+		} else {
+			if strings.ToLower(c1) != strings.ToLower(c2) {
+				return strings.ToLower(c1) < strings.ToLower(c2)
+			}
+		}
+	}
+
+	return len(chunks1) < len(chunks2)
+}
+
+// SelectDirectory recursively scans a selected folder and all subdirectories for images,
+// returning them sorted in natural human numerical order.
 func (a *App) SelectDirectory() ([]string, error) {
 	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
 		Title: "Select Folder with Images",
@@ -59,6 +94,11 @@ func (a *App) SelectDirectory() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Sort file paths using natural numerical order
+	sort.Slice(imagePaths, func(i, j int) bool {
+		return naturalLess(imagePaths[i], imagePaths[j])
+	})
 
 	return imagePaths, nil
 }

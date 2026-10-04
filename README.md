@@ -9,11 +9,11 @@ A lightweight, modern desktop slideshow application built with **Wails**, **Go**
 # Key Features & Default Behaviors
 # ==============================================================================
 
-* **Default Shuffle & Random Start:** Launching a directory picks a random starting image and automatically shuffles the playlist.
-* **Auto-Hiding Toolbar:** In full-screen mode, moving the cursor or pressing any key reveals the floating control bar, which automatically fades out after 0.5 seconds of inactivity.
-* **Recursive Image Loading:** Scans selected directories and all subfolders for supported formats (`.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.bmp`).
-* **Fade Transitions:** Smooth fade-in transitions between slide updates (can be toggled on or off).
-* **Filename & Path Access:** Displays the active image filename directly in the floating toolbar, with a single-click action to copy the full file path to your clipboard.
+*   **Sequential Order & Non-Shuffle Start:** Launching a directory starts at the first image (index 0) sorted alphabetically in ascending order, with shuffle disabled by default.
+*   **Auto-Hiding Toolbar:** In full-screen mode, moving the cursor or pressing any key reveals the floating control bar, which automatically fades out after 0.5 seconds of inactivity.
+*   **Recursive Image Loading:** Scans selected directories and all subfolders for supported formats (.jpg, .jpeg, .png, .webp, .gif, .bmp).
+*   **Fade Transitions:** Smooth fade-in transitions between slide updates (can be toggled on or off).
+*   **Filename & Path Access:** Displays the active image filename directly in the floating toolbar, with a single-click action to copy the full file path to your clipboard.
 
 ---
 # ==============================================================================

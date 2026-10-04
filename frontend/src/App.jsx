@@ -43,6 +43,13 @@ const muiTheme = createTheme({
   shape: { borderRadius: 28 },
 });
 
+// Helper function for natural sorting in JS
+const naturalSortPaths = (paths) => {
+  return [...paths].sort((a, b) =>
+    a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+  );
+};
+
 const createShuffleSequence = (length, pinOriginalIndex = -1) => {
   const indices = Array.from({ length }, (_, i) => i);
   for (let i = indices.length - 1; i > 0; i--) {
@@ -62,7 +69,7 @@ const createShuffleSequence = (length, pinOriginalIndex = -1) => {
 
 export default function App() {
   const [rawPaths, setRawPaths] = useState([]);
-  const [isShuffle, setIsShuffle] = useState(true);
+  const [isShuffle, setIsShuffle] = useState(false); // Starts with shuffle disabled
   const [playOrder, setPlayOrder] = useState([]);
   const [playIndex, setPlayIndex] = useState(0);
 
@@ -85,23 +92,19 @@ export default function App() {
   const idleTimerRef = useRef(null);
   const isToolbarHoveredRef = useRef(false);
 
-  // Keep ref in sync with state for timer callbacks
   useEffect(() => {
     isToolbarHoveredRef.current = isToolbarHovered;
   }, [isToolbarHovered]);
 
-  // Ref tracking full-screen state
   const isFullscreenRef = useRef(false);
   useEffect(() => {
     isFullscreenRef.current = isFullscreen;
   }, [isFullscreen]);
 
-  // Derive current image details
   const currentOriginalIndex = playOrder.length > 0 ? playOrder[playIndex] : 0;
   const currentFilePath = rawPaths[currentOriginalIndex] || '';
   const currentFileName = currentFilePath ? currentFilePath.split(/[/\\]/).pop() : '';
 
-  // Handle window focus / blur
   useEffect(() => {
     const handleFocus = () => setIsWindowFocused(true);
     const handleBlur = () => {
@@ -118,7 +121,6 @@ export default function App() {
     };
   }, []);
 
-  // Global mouse movement handler: shows toolbar on movement, fades after 2s of idle
   const handleMouseMove = useCallback(() => {
     if (!isWindowFocused) return;
 
@@ -126,7 +128,6 @@ export default function App() {
 
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
 
-    // Only start idle timer if mouse is NOT directly hovering over the toolbar
     idleTimerRef.current = setTimeout(() => {
       if (!isToolbarHoveredRef.current) {
         setIsControlsVisible(false);
@@ -134,7 +135,6 @@ export default function App() {
     }, 2000);
   }, [isWindowFocused]);
 
-  // Hover handlers for toolbar bounds
   const handleToolbarMouseEnter = () => {
     setIsToolbarHovered(true);
     setIsControlsVisible(true);
@@ -143,14 +143,12 @@ export default function App() {
 
   const handleToolbarMouseLeave = () => {
     setIsToolbarHovered(false);
-    // Restart idle countdown when leaving toolbar bounds
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     idleTimerRef.current = setTimeout(() => {
       setIsControlsVisible(false);
     }, 1500);
   };
 
-  // Copy current filepath
   const handleCopyPath = async () => {
     if (!currentFilePath) return;
     try {
@@ -162,7 +160,6 @@ export default function App() {
     }
   };
 
-  // Fetch image base64
   useEffect(() => {
     if (!currentFilePath) return;
 
@@ -187,22 +184,21 @@ export default function App() {
     };
   }, [currentFilePath]);
 
-  // Folder loader
+  // Folder loader - ensures natural sorting order upon loading files
   const handleLoadFolder = async () => {
     try {
       const paths = await SelectDirectory();
       if (paths && paths.length > 0) {
-        setRawPaths(paths);
+        const sortedPaths = naturalSortPaths(paths);
+        setRawPaths(sortedPaths);
         setIsPlaying(true);
 
-        const startIdx = Math.floor(Math.random() * paths.length);
-
         if (isShuffle) {
-          setPlayOrder(createShuffleSequence(paths.length, startIdx));
+          setPlayOrder(createShuffleSequence(sortedPaths.length, 0));
           setPlayIndex(0);
         } else {
-          setPlayOrder(Array.from({ length: paths.length }, (_, i) => i));
-          setPlayIndex(startIdx);
+          setPlayOrder(Array.from({ length: sortedPaths.length }, (_, i) => i));
+          setPlayIndex(0);
         }
       }
     } catch (err) {
@@ -227,7 +223,6 @@ export default function App() {
     }
   }, [isShuffle, rawPaths.length, currentOriginalIndex]);
 
-  // Next image
   const handleNext = useCallback(() => {
     if (playOrder.length === 0) return;
 
@@ -244,7 +239,6 @@ export default function App() {
     }
   }, [playIndex, playOrder.length, isShuffle, rawPaths.length]);
 
-  // Previous image
   const handlePrev = useCallback(() => {
     if (playOrder.length === 0) return;
     setPlayIndex((prev) => (prev - 1 + playOrder.length) % playOrder.length);
@@ -255,7 +249,6 @@ export default function App() {
     setIsFullscreen((prev) => !prev);
   };
 
-  // Duration adjusters
   const handleDecreaseInterval = useCallback(() => {
     setIntervalSec((prev) => Math.max(1, prev - 1));
   }, []);
@@ -264,7 +257,6 @@ export default function App() {
     setIntervalSec((prev) => Math.min(60, prev + 1));
   }, []);
 
-  // Interval timer
   useEffect(() => {
     let timer;
     if (isPlaying && rawPaths.length > 0) {
@@ -273,7 +265,6 @@ export default function App() {
     return () => clearInterval(timer);
   }, [isPlaying, intervalSec, rawPaths.length, handleNext]);
 
-  // Global Keyboard Shortcuts (Do NOT invoke handleMouseMove)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'ArrowRight') handleNext();
@@ -311,7 +302,6 @@ export default function App() {
     handleDecreaseInterval,
   ]);
 
-  // Determine final visible state
   const shouldDisplayToolbar = isWindowFocused && (isControlsVisible || isToolbarHovered);
 
   return (
@@ -321,7 +311,6 @@ export default function App() {
         onMouseMove={handleMouseMove}
         className={`app-container ${!shouldDisplayToolbar ? 'cursor-hidden' : ''}`}
       >
-        {/* Main Viewport */}
         <Box className="main-viewport">
           {loading && <CircularProgress className="loading-spinner" />}
 
@@ -345,14 +334,12 @@ export default function App() {
           )}
         </Box>
 
-        {/* Floating Toolbar */}
         <Paper
           elevation={0}
           onMouseEnter={handleToolbarMouseEnter}
           onMouseLeave={handleToolbarMouseLeave}
           className={`floating-toolbar ${shouldDisplayToolbar ? 'visible' : 'hidden'}`}
         >
-          {/* Open Directory */}
           <Tooltip title="Open Directory">
             <Button
               variant="contained"
@@ -364,7 +351,6 @@ export default function App() {
             </Button>
           </Tooltip>
 
-          {/* Playback Controls */}
           <Box className="control-group">
             <Tooltip title="Previous Image (Left Arrow)">
               <span>
@@ -395,7 +381,6 @@ export default function App() {
             </Tooltip>
           </Box>
 
-          {/* Shuffle Mode Toggle Button */}
           <Tooltip title={isShuffle ? 'Shuffle Mode: ON (S)' : 'Sequential Mode (S)'}>
             <Button
               variant={isShuffle ? 'contained' : 'outlined'}
@@ -409,7 +394,6 @@ export default function App() {
             </Button>
           </Tooltip>
 
-          {/* Transition Effect Toggle Button */}
           <Tooltip title="Toggle Fade Transitions (T)">
             <Button
               variant={transitionsEnabled ? 'contained' : 'outlined'}
@@ -422,7 +406,6 @@ export default function App() {
             </Button>
           </Tooltip>
 
-          {/* Duration Controls */}
           <Box className="control-group">
             <Tooltip title="Decrease interval by 1s (- / Down Arrow)">
               <span>
@@ -464,14 +447,12 @@ export default function App() {
             />
           </Box>
 
-          {/* Fullscreen Toggle */}
           <Tooltip title="Toggle Fullscreen (F / Esc)">
             <IconButton onClick={handleToggleFullscreen} className="icon-action-btn">
               {isFullscreen ? <FullscreenExit /> : <Fullscreen />}
             </IconButton>
           </Tooltip>
 
-          {/* Filename & Copy Filepath Action */}
           {rawPaths.length > 0 && (
             <Box className="filename-container">
               <Tooltip title={currentFilePath} arrow placement="top">
