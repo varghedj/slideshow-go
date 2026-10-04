@@ -11,6 +11,12 @@ import {
   CssBaseline,
   CircularProgress,
   Tooltip,
+  Drawer,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemSecondaryAction,
+  Divider,
 } from '@mui/material';
 import {
   PlayArrow,
@@ -27,23 +33,30 @@ import {
   Remove,
   ContentCopy,
   Check,
+  Queue,
+  Delete,
+  PlaylistPlay,
 } from '@mui/icons-material';
 
-import { SelectDirectory, ReadImage, ToggleFullscreen, ExitFullscreen } from '../wailsjs/go/main/App';
+import {
+  SelectDirectory,
+  AddDirectoryToPlaylist,
+  ReadImage,
+  ToggleFullscreen,
+  ExitFullscreen,
+} from '../wailsjs/go/main/App';
 import './App.css';
 
-// Material Design 3 Dark Expressive Theme
 const muiTheme = createTheme({
   palette: {
     mode: 'dark',
     primary: { main: '#a8c7fa' },
     secondary: { main: '#c4eca8' },
-    background: { default: '#000000', paper: 'rgba(20, 21, 25, 0.16)' },
+    background: { default: '#000000', paper: 'rgba(20, 21, 25, 0.90)' },
   },
   shape: { borderRadius: 28 },
 });
 
-// Helper function for natural sorting in JS
 const naturalSortPaths = (paths) => {
   return [...paths].sort((a, b) =>
     a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
@@ -68,8 +81,9 @@ const createShuffleSequence = (length, pinOriginalIndex = -1) => {
 };
 
 export default function App() {
+  const [playlistDirectories, setPlaylistDirectories] = useState([]);
   const [rawPaths, setRawPaths] = useState([]);
-  const [isShuffle, setIsShuffle] = useState(false); // Starts with shuffle disabled
+  const [isShuffle, setIsShuffle] = useState(false);
   const [playOrder, setPlayOrder] = useState([]);
   const [playIndex, setPlayIndex] = useState(0);
 
@@ -80,11 +94,9 @@ export default function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [transitionsEnabled, setTransitionsEnabled] = useState(true);
   const [imgKey, setImgKey] = useState(0);
+  const [isPlaylistOpen, setIsPlaylistOpen] = useState(false);
 
-  // Copy path feedback state
   const [copied, setCopied] = useState(false);
-
-  // Toolbar visibility & hover tracking
   const [isControlsVisible, setIsControlsVisible] = useState(true);
   const [isToolbarHovered, setIsToolbarHovered] = useState(false);
   const [isWindowFocused, setIsWindowFocused] = useState(true);
@@ -100,6 +112,69 @@ export default function App() {
   useEffect(() => {
     isFullscreenRef.current = isFullscreen;
   }, [isFullscreen]);
+
+  const rebuildCombinedPlaylist = useCallback((directories, shuffleMode) => {
+    let combined = [];
+    directories.forEach((dir) => {
+      combined = combined.concat(dir.images);
+    });
+
+    const sortedCombined = naturalSortPaths(combined);
+    setRawPaths(sortedCombined);
+
+    if (sortedCombined.length > 0) {
+      if (shuffleMode) {
+        setPlayOrder(createShuffleSequence(sortedCombined.length, 0));
+      } else {
+        setPlayOrder(Array.from({ length: sortedCombined.length }, (_, i) => i));
+      }
+      setPlayIndex(0);
+    } else {
+      setPlayOrder([]);
+      setPlayIndex(0);
+      setCurrentSrc('');
+    }
+  }, []);
+
+  const handleAddDirectory = async () => {
+    try {
+      const res = await AddDirectoryToPlaylist();
+      if (res && res.images && res.images.length > 0) {
+        const updated = [...playlistDirectories, res];
+        setPlaylistDirectories(updated);
+        rebuildCombinedPlaylist(updated, isShuffle);
+      }
+    } catch (err) {
+      console.error('Error adding directory:', err);
+    }
+  };
+
+  const handleRemoveDirectory = (indexToRemove) => {
+    const updated = playlistDirectories.filter((_, idx) => idx !== indexToRemove);
+    setPlaylistDirectories(updated);
+    rebuildCombinedPlaylist(updated, isShuffle);
+  };
+
+  const handleClearPlaylist = () => {
+    setPlaylistDirectories([]);
+    setRawPaths([]);
+    setPlayOrder([]);
+    setPlayIndex(0);
+    setCurrentSrc('');
+  };
+
+  const handleLoadSingleFolder = async () => {
+    try {
+      const paths = await SelectDirectory();
+      if (paths && paths.length > 0) {
+        const singleDirEntry = [{ dirPath: 'Selected Directory', images: paths }];
+        setPlaylistDirectories(singleDirEntry);
+        rebuildCombinedPlaylist(singleDirEntry, isShuffle);
+      }
+    } catch (err) {
+      console.error('Error opening folder:', err);
+    }
+  };
 
   const currentOriginalIndex = playOrder.length > 0 ? playOrder[playIndex] : 0;
   const currentFilePath = rawPaths[currentOriginalIndex] || '';
@@ -123,9 +198,7 @@ export default function App() {
 
   const handleMouseMove = useCallback(() => {
     if (!isWindowFocused) return;
-
     setIsControlsVisible(true);
-
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
 
     idleTimerRef.current = setTimeout(() => {
@@ -184,29 +257,6 @@ export default function App() {
     };
   }, [currentFilePath]);
 
-  // Folder loader - ensures natural sorting order upon loading files
-  const handleLoadFolder = async () => {
-    try {
-      const paths = await SelectDirectory();
-      if (paths && paths.length > 0) {
-        const sortedPaths = naturalSortPaths(paths);
-        setRawPaths(sortedPaths);
-        setIsPlaying(true);
-
-        if (isShuffle) {
-          setPlayOrder(createShuffleSequence(sortedPaths.length, 0));
-          setPlayIndex(0);
-        } else {
-          setPlayOrder(Array.from({ length: sortedPaths.length }, (_, i) => i));
-          setPlayIndex(0);
-        }
-      }
-    } catch (err) {
-      console.error('Error opening folder:', err);
-    }
-  };
-
-  // Shuffle toggle
   const handleToggleShuffle = useCallback(() => {
     if (rawPaths.length === 0) return;
 
@@ -322,33 +372,62 @@ export default function App() {
               className={`slideshow-image ${transitionsEnabled ? 'fade-active' : ''}`}
             />
           ) : (
-            <Button
-              variant="contained"
-              startIcon={<FolderOpen />}
-              onClick={handleLoadFolder}
-              size="large"
-              className="select-folder-btn"
-            >
-              Select Image Directory
-            </Button>
+            <Box style={{ display: 'flex', gap: '16px' }}>
+              <Button
+                variant="contained"
+                startIcon={<FolderOpen />}
+                onClick={handleLoadSingleFolder}
+                size="large"
+                className="select-folder-btn"
+              >
+                Open Single Directory
+              </Button>
+              <Button
+                variant="contained"
+                color="secondary"
+                startIcon={<Queue />}
+                onClick={handleAddDirectory}
+                size="large"
+                className="select-folder-btn"
+              >
+                Add Folder to Playlist
+              </Button>
+            </Box>
           )}
         </Box>
 
+        {/* Floating Control Bar */}
         <Paper
           elevation={0}
           onMouseEnter={handleToolbarMouseEnter}
           onMouseLeave={handleToolbarMouseLeave}
           className={`floating-toolbar ${shouldDisplayToolbar ? 'visible' : 'hidden'}`}
         >
-          <Tooltip title="Open Directory">
+          <Tooltip title="Open Single Folder">
             <Button
               variant="contained"
               startIcon={<FolderOpen />}
-              onClick={handleLoadFolder}
+              onClick={handleLoadSingleFolder}
               className="folder-btn"
             >
               Folder
             </Button>
+          </Tooltip>
+
+          <Tooltip title="Add Folder to Playlist">
+            <IconButton onClick={handleAddDirectory} className="icon-action-btn">
+              <Queue />
+            </IconButton>
+          </Tooltip>
+
+          <Tooltip title={`Playlist Manager (${playlistDirectories.length} Folders)`}>
+            <IconButton
+              onClick={() => setIsPlaylistOpen(true)}
+              color={playlistDirectories.length > 0 ? 'primary' : 'default'}
+              className="icon-action-btn"
+            >
+              <PlaylistPlay />
+            </IconButton>
           </Tooltip>
 
           <Box className="control-group">
@@ -474,6 +553,64 @@ export default function App() {
             </Box>
           )}
         </Paper>
+
+        {/* Playlist Drawer Panel */}
+        <Drawer
+          anchor="right"
+          open={isPlaylistOpen}
+          onClose={() => setIsPlaylistOpen(false)}
+        >
+          <Box style={{ width: 320, padding: '16px' }}>
+            <Typography variant="h6" gutterBottom>
+              Playlist Manager
+            </Typography>
+            <Typography variant="body2" color="textSecondary" paragraph>
+              Total Images Loaded: {rawPaths.length}
+            </Typography>
+
+            <Box style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+              <Button
+                variant="contained"
+                fullWidth
+                startIcon={<Queue />}
+                onClick={handleAddDirectory}
+              >
+                Add
+              </Button>
+              <Button
+                variant="outlined"
+                color="error"
+                fullWidth
+                startIcon={<Delete />}
+                onClick={handleClearPlaylist}
+                disabled={playlistDirectories.length === 0}
+              >
+                Clear
+              </Button>
+            </Box>
+
+            <Divider />
+
+            <List>
+              {playlistDirectories.map((item, index) => (
+                <ListItem key={index}>
+                  <ListItemText
+                    primary={item.dirPath.split(/[/\\]/).pop() || item.dirPath}
+                    secondary={`${item.images.length} images`}
+                  />
+                  <ListItemSecondaryAction>
+                    <IconButton
+                      edge="end"
+                      onClick={() => handleRemoveDirectory(index)}
+                    >
+                      <Delete />
+                    </IconButton>
+                  </ListItemSecondaryAction>
+                </ListItem>
+              ))}
+            </List>
+          </Box>
+        </Drawer>
       </Box>
     </ThemeProvider>
   );
