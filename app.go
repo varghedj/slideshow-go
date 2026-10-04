@@ -15,6 +15,12 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
+// ============================================================================
+// DATA STRUCTURES & APP SETUP
+// Add new Go struct definitions or backend state here.
+// ============================================================================
+
+// DirectoryResult holds directory paths and their scanned image file lists.
 type DirectoryResult struct {
 	DirPath string   `json:"dirPath"`
 	Images  []string `json:"images"`
@@ -32,6 +38,12 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 }
 
+// ============================================================================
+// HELPER FUNCTIONS (SORTING & FILE SYSTEM SCANNING)
+// Add custom file-parsing, sorting algorithms, or OS helpers here.
+// ============================================================================
+
+// naturalLess compares two strings using natural numerical sorting order (e.g. "image2" before "image10")
 func naturalLess(s1, s2 string) bool {
 	re := regexp.MustCompile(`(\d+|\D+)`)
 	chunks1 := re.FindAllString(s1, -1)
@@ -62,6 +74,7 @@ func naturalLess(s1, s2 string) bool {
 	return len(chunks1) < len(chunks2)
 }
 
+// scanDirectory recursively walks through a directory to gather supported image paths
 func (a *App) scanDirectory(dir string) ([]string, error) {
 	var imagePaths []string
 	validExts := map[string]bool{
@@ -97,7 +110,12 @@ func (a *App) scanDirectory(dir string) ([]string, error) {
 	return imagePaths, nil
 }
 
-// SelectDirectory opens a directory dialog and returns all found images in natural sort order
+// ============================================================================
+// WAILS EXPOSED METHODS (FRONTEND API CALLS)
+// Add new Go methods here that you want to bind and call in React/JavaScript.
+// ============================================================================
+
+// SelectDirectory opens a directory picker and returns all found images in natural sort order
 func (a *App) SelectDirectory() ([]string, error) {
 	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
 		Title: "Select Folder with Images",
@@ -109,7 +127,7 @@ func (a *App) SelectDirectory() ([]string, error) {
 	return a.scanDirectory(dir)
 }
 
-// AddDirectoryToPlaylist opens a directory dialog and returns structured result with folder path and images
+// AddDirectoryToPlaylist opens a directory picker and returns structured path + image results
 func (a *App) AddDirectoryToPlaylist() (*DirectoryResult, error) {
 	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
 		Title: "Add Folder to Playlist",
@@ -129,6 +147,7 @@ func (a *App) AddDirectoryToPlaylist() (*DirectoryResult, error) {
 	}, nil
 }
 
+// ReadImage reads a file from disk and encodes it into a Base64 Data URI
 func (a *App) ReadImage(filePath string) (string, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
@@ -156,6 +175,7 @@ func (a *App) ReadImage(filePath string) (string, error) {
 	return fmt.Sprintf("data:%s;base64,%s", mimeType, encoded), nil
 }
 
+// ToggleFullscreen toggles the main window fullscreen state
 func (a *App) ToggleFullscreen() {
 	if runtime.WindowIsFullscreen(a.ctx) {
 		runtime.WindowUnfullscreen(a.ctx)
@@ -164,6 +184,7 @@ func (a *App) ToggleFullscreen() {
 	}
 }
 
+// ExitFullscreen forces the window out of fullscreen mode
 func (a *App) ExitFullscreen() {
 	runtime.WindowUnfullscreen(a.ctx)
 }
