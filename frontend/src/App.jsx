@@ -18,6 +18,11 @@ import {
   ListItemSecondaryAction,
   Divider,
 } from '@mui/material';
+
+// ============================================================================
+// ICON IMPORTS
+// Add new Material-UI icons here as needed for future toolbar/UI actions.
+// ============================================================================
 import {
   PlayArrow,
   Pause,
@@ -36,8 +41,14 @@ import {
   Queue,
   Delete,
   PlaylistPlay,
+  PushPin,
+  PushPinOutlined,
 } from '@mui/icons-material';
 
+// ============================================================================
+// WAILS BACKEND BINDINGS
+// Import any newly added Go methods from the generated Wails bindings here.
+// ============================================================================
 import {
   SelectDirectory,
   AddDirectoryToPlaylist,
@@ -47,6 +58,7 @@ import {
 } from '../wailsjs/go/main/App';
 import './App.css';
 
+// Custom dark theme configuration
 const muiTheme = createTheme({
   palette: {
     mode: 'dark',
@@ -57,6 +69,10 @@ const muiTheme = createTheme({
   shape: { borderRadius: 28 },
 });
 
+// ============================================================================
+// UTILITY FUNCTIONS
+// Add client-side data transformation or sorting helpers here.
+// ============================================================================
 const naturalSortPaths = (paths) => {
   return [...paths].sort((a, b) =>
     a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
@@ -81,7 +97,11 @@ const createShuffleSequence = (length, pinOriginalIndex = -1) => {
 };
 
 export default function App() {
-  const [playlistDirectories, setPlaylistDirectories] = useState([]);
+  // ==========================================================================
+  // STATE DEFINITIONS
+  // Place new application states or toggle flags in this section.
+  // ==========================================================================
+  const [playlistDirectories, setPlaylistDirectories] = useState([]); // Array of { dirPath, images }
   const [rawPaths, setRawPaths] = useState([]);
   const [isShuffle, setIsShuffle] = useState(false);
   const [playOrder, setPlayOrder] = useState([]);
@@ -94,25 +114,33 @@ export default function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [transitionsEnabled, setTransitionsEnabled] = useState(true);
   const [imgKey, setImgKey] = useState(0);
+
+  // Panel & Toolbar Visibility States
   const [isPlaylistOpen, setIsPlaylistOpen] = useState(false);
+  const [isPinned, setIsPinned] = useState(false); // Pin toolbar always visible
 
   const [copied, setCopied] = useState(false);
   const [isControlsVisible, setIsControlsVisible] = useState(true);
   const [isToolbarHovered, setIsToolbarHovered] = useState(false);
   const [isWindowFocused, setIsWindowFocused] = useState(true);
 
+  // Refs for tracking timer callbacks and fullscreen status across listeners
   const idleTimerRef = useRef(null);
   const isToolbarHoveredRef = useRef(false);
+  const isFullscreenRef = useRef(false);
 
   useEffect(() => {
     isToolbarHoveredRef.current = isToolbarHovered;
   }, [isToolbarHovered]);
 
-  const isFullscreenRef = useRef(false);
   useEffect(() => {
     isFullscreenRef.current = isFullscreen;
   }, [isFullscreen]);
 
+  // ==========================================================================
+  // PLAYLIST & DIRECTORY HANDLERS
+  // Add playlist management methods or collection handlers here.
+  // ==========================================================================
   const rebuildCombinedPlaylist = useCallback((directories, shuffleMode) => {
     let combined = [];
     directories.forEach((dir) => {
@@ -176,10 +204,15 @@ export default function App() {
     }
   };
 
+  // Currently displayed image calculations
   const currentOriginalIndex = playOrder.length > 0 ? playOrder[playIndex] : 0;
   const currentFilePath = rawPaths[currentOriginalIndex] || '';
   const currentFileName = currentFilePath ? currentFilePath.split(/[/\\]/).pop() : '';
 
+  // ==========================================================================
+  // UI & TOOLBAR VISIBILITY LOGIC
+  // Customize auto-hide delays, window focus triggers, or pinning logic here.
+  // ==========================================================================
   useEffect(() => {
     const handleFocus = () => setIsWindowFocused(true);
     const handleBlur = () => {
@@ -233,6 +266,7 @@ export default function App() {
     }
   };
 
+  // Load image binary content on path change
   useEffect(() => {
     if (!currentFilePath) return;
 
@@ -257,6 +291,10 @@ export default function App() {
     };
   }, [currentFilePath]);
 
+  // ==========================================================================
+  // NAVIGATION & CONTROL HANDLERS
+  // Add slideshow navigation rules or playback features here.
+  // ==========================================================================
   const handleToggleShuffle = useCallback(() => {
     if (rawPaths.length === 0) return;
 
@@ -307,6 +345,7 @@ export default function App() {
     setIntervalSec((prev) => Math.min(60, prev + 1));
   }, []);
 
+  // Automatic slide advancement timer
   useEffect(() => {
     let timer;
     if (isPlaying && rawPaths.length > 0) {
@@ -315,6 +354,10 @@ export default function App() {
     return () => clearInterval(timer);
   }, [isPlaying, intervalSec, rawPaths.length, handleNext]);
 
+  // ==========================================================================
+  // KEYBOARD SHORTCUTS
+  // Map new keyboard hotkeys to actions in this keydown listener.
+  // ==========================================================================
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'ArrowRight') handleNext();
@@ -331,6 +374,9 @@ export default function App() {
       if (e.key === 's' || e.key === 'S') handleToggleShuffle();
       if (e.key === 't' || e.key === 'T') {
         setTransitionsEnabled((prev) => !prev);
+      }
+      if (e.key === 'v' || e.key === 'V') {
+        setIsPinned((prev) => !prev); // Shortcut to pin/unpin toolbar
       }
       if (e.key === '+' || e.key === '=' || e.key === 'ArrowUp') {
         e.preventDefault();
@@ -352,7 +398,8 @@ export default function App() {
     handleDecreaseInterval,
   ]);
 
-  const shouldDisplayToolbar = isWindowFocused && (isControlsVisible || isToolbarHovered);
+  // Evaluate whether toolbar should display based on pin state or user interaction
+  const shouldDisplayToolbar = isPinned || (isWindowFocused && (isControlsVisible || isToolbarHovered));
 
   return (
     <ThemeProvider theme={muiTheme}>
@@ -361,6 +408,9 @@ export default function App() {
         onMouseMove={handleMouseMove}
         className={`app-container ${!shouldDisplayToolbar ? 'cursor-hidden' : ''}`}
       >
+        {/* ================================================================== */}
+        {/* MAIN IMAGE VIEWPORT */}
+        {/* ================================================================== */}
         <Box className="main-viewport">
           {loading && <CircularProgress className="loading-spinner" />}
 
@@ -396,13 +446,17 @@ export default function App() {
           )}
         </Box>
 
-        {/* Floating Control Bar */}
+        {/* ================================================================== */}
+        {/* FLOATING CONTROL TOOLBAR */}
+        {/* Place new floating toolbar buttons or controls inside this element */}
+        {/* ================================================================== */}
         <Paper
           elevation={0}
           onMouseEnter={handleToolbarMouseEnter}
           onMouseLeave={handleToolbarMouseLeave}
           className={`floating-toolbar ${shouldDisplayToolbar ? 'visible' : 'hidden'}`}
         >
+          {/* Directory & Playlist Openers */}
           <Tooltip title="Open Single Folder">
             <Button
               variant="contained"
@@ -430,6 +484,18 @@ export default function App() {
             </IconButton>
           </Tooltip>
 
+          {/* Pin Toolbar Always Visible Toggle */}
+          <Tooltip title={isPinned ? 'Unpin Toolbar (V)' : 'Pin Toolbar Always Visible (V)'}>
+            <IconButton
+              onClick={() => setIsPinned((prev) => !prev)}
+              color={isPinned ? 'primary' : 'default'}
+              className="icon-action-btn"
+            >
+              {isPinned ? <PushPin /> : <PushPinOutlined />}
+            </IconButton>
+          </Tooltip>
+
+          {/* Navigation Controls */}
           <Box className="control-group">
             <Tooltip title="Previous Image (Left Arrow)">
               <span>
@@ -460,6 +526,7 @@ export default function App() {
             </Tooltip>
           </Box>
 
+          {/* Playback Mode Toggles */}
           <Tooltip title={isShuffle ? 'Shuffle Mode: ON (S)' : 'Sequential Mode (S)'}>
             <Button
               variant={isShuffle ? 'contained' : 'outlined'}
@@ -485,6 +552,7 @@ export default function App() {
             </Button>
           </Tooltip>
 
+          {/* Duration Interval Controls */}
           <Box className="control-group">
             <Tooltip title="Decrease interval by 1s (- / Down Arrow)">
               <span>
@@ -526,12 +594,14 @@ export default function App() {
             />
           </Box>
 
+          {/* Fullscreen Mode Action */}
           <Tooltip title="Toggle Fullscreen (F / Esc)">
             <IconButton onClick={handleToggleFullscreen} className="icon-action-btn">
               {isFullscreen ? <FullscreenExit /> : <Fullscreen />}
             </IconButton>
           </Tooltip>
 
+          {/* File Name & Path Info */}
           {rawPaths.length > 0 && (
             <Box className="filename-container">
               <Tooltip title={currentFilePath} arrow placement="top">
@@ -554,7 +624,10 @@ export default function App() {
           )}
         </Paper>
 
-        {/* Playlist Drawer Panel */}
+        {/* ================================================================== */}
+        {/* PLAYLIST DRAWER PANEL */}
+        {/* Place drawer items or list actions in this section */}
+        {/* ================================================================== */}
         <Drawer
           anchor="right"
           open={isPlaylistOpen}
@@ -568,6 +641,7 @@ export default function App() {
               Total Images Loaded: {rawPaths.length}
             </Typography>
 
+            {/* Playlist Actions */}
             <Box style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
               <Button
                 variant="contained"
@@ -591,6 +665,7 @@ export default function App() {
 
             <Divider />
 
+            {/* Directory List */}
             <List>
               {playlistDirectories.map((item, index) => (
                 <ListItem key={index}>
