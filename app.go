@@ -15,6 +15,11 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
+type DirectoryResult struct {
+	DirPath string   `json:"dirPath"`
+	Images  []string `json:"images"`
+}
+
 type App struct {
 	ctx context.Context
 }
@@ -27,7 +32,6 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 }
 
-// naturalLess compares two strings using natural human ordering (e.g., "jane (2)" < "jane (10)")
 func naturalLess(s1, s2 string) bool {
 	re := regexp.MustCompile(`(\d+|\D+)`)
 	chunks1 := re.FindAllString(s1, -1)
@@ -58,16 +62,7 @@ func naturalLess(s1, s2 string) bool {
 	return len(chunks1) < len(chunks2)
 }
 
-// SelectDirectory recursively scans a selected folder and all subdirectories for images,
-// returning them sorted in natural human numerical order.
-func (a *App) SelectDirectory() ([]string, error) {
-	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Select Folder with Images",
-	})
-	if err != nil || dir == "" {
-		return nil, err
-	}
-
+func (a *App) scanDirectory(dir string) ([]string, error) {
 	var imagePaths []string
 	validExts := map[string]bool{
 		".jpg":  true,
@@ -78,9 +73,9 @@ func (a *App) SelectDirectory() ([]string, error) {
 		".bmp":  true,
 	}
 
-	err = filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			return nil // Skip unreadable folders
+			return nil
 		}
 		if !d.IsDir() {
 			ext := strings.ToLower(filepath.Ext(d.Name()))
@@ -95,7 +90,6 @@ func (a *App) SelectDirectory() ([]string, error) {
 		return nil, err
 	}
 
-	// Sort file paths using natural numerical order
 	sort.Slice(imagePaths, func(i, j int) bool {
 		return naturalLess(imagePaths[i], imagePaths[j])
 	})
@@ -103,7 +97,38 @@ func (a *App) SelectDirectory() ([]string, error) {
 	return imagePaths, nil
 }
 
-// ReadImage encodes the image file into base64 to display cleanly in WebView2
+// SelectDirectory opens a directory dialog and returns all found images in natural sort order
+func (a *App) SelectDirectory() ([]string, error) {
+	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Select Folder with Images",
+	})
+	if err != nil || dir == "" {
+		return nil, err
+	}
+
+	return a.scanDirectory(dir)
+}
+
+// AddDirectoryToPlaylist opens a directory dialog and returns structured result with folder path and images
+func (a *App) AddDirectoryToPlaylist() (*DirectoryResult, error) {
+	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Add Folder to Playlist",
+	})
+	if err != nil || dir == "" {
+		return nil, err
+	}
+
+	images, err := a.scanDirectory(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	return &DirectoryResult{
+		DirPath: dir,
+		Images:  images,
+	}, nil
+}
+
 func (a *App) ReadImage(filePath string) (string, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
@@ -131,7 +156,6 @@ func (a *App) ReadImage(filePath string) (string, error) {
 	return fmt.Sprintf("data:%s;base64,%s", mimeType, encoded), nil
 }
 
-// ToggleFullscreen switches native window fullscreen mode
 func (a *App) ToggleFullscreen() {
 	if runtime.WindowIsFullscreen(a.ctx) {
 		runtime.WindowUnfullscreen(a.ctx)
@@ -140,7 +164,6 @@ func (a *App) ToggleFullscreen() {
 	}
 }
 
-// ExitFullscreen forces windowed mode
 func (a *App) ExitFullscreen() {
 	runtime.WindowUnfullscreen(a.ctx)
 }
