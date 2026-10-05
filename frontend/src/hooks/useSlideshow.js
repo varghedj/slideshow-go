@@ -33,7 +33,7 @@ export function useSlideshow() {
   // Favorites & Tagging State
   const [isLikedState, setIsLikedState] = useState(false);
   const [tags, setTags] = useState([]);
-  const [allKnownTags, setAllKnownTags] = useState(new Set(['untagged']));
+  const [allKnownTags, setAllKnownTags] = useState(new Set());
   const [tagInput, setTagInput] = useState('');
   const [isTagDialogOpen, setIsTagDialogOpen] = useState(false);
 
@@ -67,7 +67,7 @@ export function useSlideshow() {
       GetAllTags()
         .then((fetchedTags) => {
           if (fetchedTags && fetchedTags.length > 0) {
-            setAllKnownTags(new Set([...fetchedTags, 'untagged']));
+            setAllKnownTags(new Set(fetchedTags));
           }
         })
         .catch((err) => console.error('Failed to load global tag index:', err));
@@ -92,7 +92,7 @@ export function useSlideshow() {
       const matching = [];
       for (const filePath of rawPaths) {
         try {
-          const imgTags = (await GetTags(filePath)) || ['untagged'];
+          const imgTags = (await GetTags(filePath)) || [];
           const hasMatch = selectedFilterTags.some((filterTag) =>
             imgTags.some((t) => t.toLowerCase() === filterTag.toLowerCase())
           );
@@ -206,7 +206,7 @@ export function useSlideshow() {
     if (typeof GetTags === 'function') {
       GetTags(currentFilePath)
         .then((fetchedTags) => {
-          const safeTags = fetchedTags || ['untagged'];
+          const safeTags = fetchedTags || [];
           setTags(safeTags);
           setAllKnownTags((prev) => {
             const updated = new Set(prev);
@@ -234,7 +234,7 @@ export function useSlideshow() {
 
     try {
       const updatedTags = await AddTag(currentFilePath, tagToUse);
-      const safeTags = updatedTags || ['untagged'];
+      const safeTags = updatedTags || [];
       setTags(safeTags);
       setTagInput('');
       setAllKnownTags((prev) => new Set(prev).add(tagToUse));

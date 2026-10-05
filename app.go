@@ -13,8 +13,6 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-const UntaggedTag = "untagged"
-
 // DirectoryImages represents a directory and its scanned image paths.
 type DirectoryImages struct {
 	DirPath string   `json:"dirPath"`
@@ -37,7 +35,6 @@ func NewApp() *App {
 		imageTags:    make(map[string][]string),
 		allKnownTags: make(map[string]bool),
 	}
-	app.allKnownTags[UntaggedTag] = true
 	return app
 }
 
@@ -139,20 +136,19 @@ func (a *App) IsLiked(filePath string) (bool, error) {
 	return a.likedImages[filePath], nil
 }
 
-// GetTags returns the tags assigned to a specific image file. Returns ["untagged"] if none exist.
+// GetTags returns the tags assigned to a specific image file. Returns an empty slice if none exist.
 func (a *App) GetTags(filePath string) ([]string, error) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
 	tags := a.imageTags[filePath]
 	if len(tags) == 0 {
-		return []string{UntaggedTag}, nil
+		return []string{}, nil
 	}
 	return tags, nil
 }
 
 // AddTag assigns a new tag to a specific image file.
-// If a custom tag is added, the default "untagged" tag is automatically removed.
 func (a *App) AddTag(filePath string, tag string) ([]string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -166,30 +162,15 @@ func (a *App) AddTag(filePath string, tag string) ([]string, error) {
 	a.allKnownTags[strings.ToLower(tag)] = true
 
 	existing := a.imageTags[filePath]
-	var cleaned []string
-
-	if strings.EqualFold(tag, UntaggedTag) {
-		// Adding "untagged" resets custom tags
-		a.imageTags[filePath] = []string{UntaggedTag}
-		return a.imageTags[filePath], nil
-	}
-
-	// Remove "untagged" tag if it exists when adding a real tag
-	for _, t := range existing {
-		if !strings.EqualFold(t, UntaggedTag) {
-			cleaned = append(cleaned, t)
-		}
-	}
 
 	// Check for duplicates
-	for _, t := range cleaned {
+	for _, t := range existing {
 		if strings.EqualFold(t, tag) {
-			a.imageTags[filePath] = cleaned
-			return cleaned, nil
+			return existing, nil
 		}
 	}
 
-	updated := append(cleaned, tag)
+	updated := append(existing, tag)
 	a.imageTags[filePath] = updated
 	return updated, nil
 }
@@ -210,7 +191,7 @@ func (a *App) GetAllTags() ([]string, error) {
 func (a *App) getTagsLocked(filePath string) []string {
 	tags := a.imageTags[filePath]
 	if len(tags) == 0 {
-		return []string{UntaggedTag}
+		return []string{}
 	}
 	return tags
 }
