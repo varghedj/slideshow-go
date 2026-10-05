@@ -30,6 +30,7 @@ import {
   SkipPrevious,
   Shuffle,
   FolderOpen,
+  FolderSpecial,
   Fullscreen,
   FullscreenExit,
   AutoAwesome,
@@ -430,15 +431,15 @@ export default function App() {
           onMouseLeave={handleToolbarMouseLeave}
           className={`floating-toolbar ${shouldDisplayToolbar ? 'visible' : 'hidden'}`}
         >
-          {/* Folder & Playlist Management */}
-          <Tooltip title="Open Folder">
+          {/* Open Library Button */}
+          <Tooltip title="Open Image Library">
             <Button
               variant="contained"
-              startIcon={<FolderOpen />}
+              startIcon={<FolderSpecial />}
               onClick={handleLoadSingleFolder}
               className="folder-btn"
             >
-              Folder
+              <span className="button-text-label">Open Library</span>
             </Button>
           </Tooltip>
 
@@ -500,7 +501,7 @@ export default function App() {
             </Tooltip>
           </Box>
 
-          {/* Shuffle Toggle */}
+          {/* Shuffle Button */}
           <Tooltip title={isShuffle ? 'Shuffle Mode: ON (S)' : 'Sequential Mode (S)'}>
             <Button
               variant={isShuffle ? 'contained' : 'outlined'}
@@ -510,7 +511,7 @@ export default function App() {
               disabled={!rawPaths.length}
               className="pill-btn"
             >
-              Shuffle {isShuffle ? 'ON' : 'OFF'}
+              <span className="button-text-label">Shuffle {isShuffle ? 'ON' : 'OFF'}</span>
             </Button>
           </Tooltip>
 
