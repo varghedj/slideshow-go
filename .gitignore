@@ -1,3 +1,9 @@
 build/bin
 node_modules
 frontend/dist
+
+# Ignore local tag database/store files
+*.db
+*.sqlite
+tags.json
+data/
