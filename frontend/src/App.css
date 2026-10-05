@@ -1,231 +1,281 @@
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-  user-select: none;
-}
-
-body, html, #root {
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
-  background-color: #000000;
-}
-
-/* App Root Layout */
+/* ============================================================================
+   1. GLOBAL CONTAINER & BASE LAYOUT
+   Core application viewport rules and global cursor behaviors.
+   ============================================================================ */
 .app-container {
   width: 100vw;
   height: 100vh;
   background-color: #000000;
-  display: flex;
-  flex-direction: column;
   overflow: hidden;
   position: relative;
-  cursor: default;
+  user-select: none;
 }
 
-.app-container.cursor-hidden {
-  cursor: none;
+/* Hide cursor during slideshow presentation when UI controls auto-hide */
+.cursor-hidden {
+  cursor: none !important;
 }
 
-/* Main Image Viewport */
+/* ============================================================================
+   2. MAIN VIEWPORT & IMAGE DISPLAY
+   Layout container for active image rendering and loading indicators.
+   ============================================================================ */
 .main-viewport {
-  flex: 1;
   width: 100%;
   height: 100%;
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
   position: relative;
 }
 
 .loading-spinner {
   position: absolute;
-  z-index: 2;
-  color: #a8c7fa;
+  z-index: 10;
 }
 
-/* Image scaling inside viewport */
+/* Base Image Styling */
 .slideshow-image {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-  opacity: 1;
+  pointer-events: none;
 }
 
-/* Smooth Fade Animation */
-.slideshow-image.fade-active {
-  animation: smoothFade 0.35s ease-in-out forwards;
+/* ============================================================================
+   3. UNIFIED START SCREEN (EMPTY STATE)
+   Styling for the single unified launch button shown on app open.
+   ============================================================================ */
+.empty-state-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
 }
 
-@keyframes smoothFade {
-  0% {
-    opacity: 0;
-    transform: scale(0.985);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.select-folder-btn {
-  border-radius: 32px !important;
+.start-slideshow-btn {
   padding: 14px 32px !important;
-  font-size: 1.1rem !important;
+  font-size: 1.15rem !important;
+  font-weight: 600 !important;
+  text-transform: none !important;
+  border-radius: 30px !important;
+  box-shadow: 0 8px 24px rgba(168, 199, 250, 0.25) !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease !important;
 }
 
-/* Floating Toolbar Base (Transparent 0.16 Backing) */
+.start-slideshow-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(168, 199, 250, 0.35) !important;
+}
+
+/* ============================================================================
+   4. TRANSITION ANIMATIONS
+   ============================================================================ */
+
+/* Fade Transition - Slowed down for a smoother effect */
+.fade-active {
+  animation: fadeIn 0.8s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ============================================================================
+   5. FLOATING CONTROL TOOLBAR (STRICT BOUNDARY & PRIORITY LAYOUT)
+   ============================================================================ */
 .floating-toolbar {
   position: absolute;
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  padding: 12px 24px;
   display: flex;
   align-items: center;
-  gap: 16px;
-  border-radius: 40px;
-  background-color: rgba(20, 21, 25, 0.16) !important;
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  border: 1px solid rgba(255, 255, 255, 0.18) !important;
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-  z-index: 10;
-  transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease;
-  opacity: 1;
-  pointer-events: auto;
-  visibility: visible;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 16px;
+  z-index: 100;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  background-color: rgba(20, 21, 25, 0.90) !important;
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 28px;
+  
+  /* Strict Containment: Never allow overflow or horizontal scrollbars */
+  max-width: calc(100vw - 32px);
+  overflow: hidden !important; 
+  white-space: nowrap;
+  box-sizing: border-box;
 }
 
-/* Hide Toolbar in Fullscreen Mode on Idle */
-.floating-toolbar.toolbar-hidden {
-  opacity: 0;
-  pointer-events: none;
-  visibility: hidden;
+/* Priority 1 (High): Core Navigation & Playback Controls - Never Shrink */
+.nav-btn,
+.play-pause-btn,
+.icon-action-btn {
+  flex-shrink: 0 !important;
 }
 
-/* Generic Control Groups */
-.control-group {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-/* Open Folder Button */
+/* Priority 2 (Medium): Collapsible Buttons */
+.pill-btn,
 .folder-btn {
-  border-radius: 24px !important;
-  background-color: rgba(255, 255, 255, 0.15) !important;
-  color: #ffffff !important;
-  font-weight: 600 !important;
-  border: 1px solid rgba(255, 255, 255, 0.3) !important;
-  backdrop-filter: blur(4px);
-  text-transform: none !important;
+  flex-shrink: 0 !important;
 }
 
-.folder-btn:hover {
-  background-color: rgba(255, 255, 255, 0.25) !important;
-}
-
-/* Forward & Backward Buttons */
-.nav-btn {
-  color: #ffffff !important;
-  background-color: rgba(255, 255, 255, 0.1) !important;
-  filter: drop-shadow(0px 2px 4px rgba(0, 0, 0, 0.8));
-}
-
-.nav-btn:hover {
-  background-color: rgba(255, 255, 255, 0.2) !important;
-}
-
-/* Center Play/Pause Highlighted Button */
-.play-pause-btn {
-  color: #000000 !important;
-  background-color: #a8c7fa !important;
-  margin: 0 4px !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5) !important;
-}
-
-.play-pause-btn:hover {
-  background-color: #c3dcff !important;
-}
-
-/* Generic Pill Feature Buttons (Shuffle / Transitions) */
-.pill-btn {
-  border-radius: 24px !important;
-  text-transform: none !important;
-  padding-left: 16px !important;
-  padding-right: 16px !important;
-  border-color: rgba(255, 255, 255, 0.25) !important;
-}
-
-/* Duration Step (- / +) Icon Buttons */
-.step-btn {
-  color: #ffffff !important;
-  background-color: rgba(255, 255, 255, 0.1) !important;
-}
-
-.step-btn:hover {
-  background-color: rgba(255, 255, 255, 0.2) !important;
-}
-
-/* Duration Display Pill Label */
-.interval-label {
-  font-weight: 700 !important;
-  min-width: 36px;
-  text-align: center;
-  color: #ffffff;
-  background-color: rgba(0, 0, 0, 0.4);
-  padding: 2px 8px;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
-}
-
-/* Duration Slider Custom Styling */
+/* Priority 3 (Low): Flexible / Hideable Elements */
 .duration-slider {
   width: 70px !important;
-  margin-left: 8px !important;
-  color: #a8c7fa !important;
+  min-width: 30px;
+  margin-left: 6px !important;
+  flex-shrink: 1 !important;
 }
 
-.duration-slider .MuiSlider-track {
-  height: 6px;
-  border: none;
-}
-
-.duration-slider .MuiSlider-rail {
-  height: 6px;
-  background-color: rgba(255, 255, 255, 0.35);
-}
-
-.duration-slider .MuiSlider-thumb {
-  height: 16px;
-  width: 16px;
-  background-color: #ffffff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
-}
-
-.duration-slider .MuiSlider-thumb:hover,
-.duration-slider .MuiSlider-thumb.Mui-focusVisible,
-.duration-slider .MuiSlider-thumb.Mui-active {
-  box-shadow: 0 0 0 8px rgba(168, 199, 250, 0.25);
-}
-
-/* Filename & Copy Container */
 .filename-container {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-left: 4px;
+  max-width: 180px;
+  min-width: 0; /* Allows container to shrink down to 0px before clipping */
+  flex-shrink: 1 !important;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 4px 8px 4px 10px;
+  border-radius: 20px;
+  overflow: hidden;
 }
 
 .filename-text {
-  max-width: 180px;
-  font-weight: 500 !important;
-  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.8rem !important;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.icon-action-btn {
-  color: rgba(255, 255, 255, 0.9) !important;
+/* ============================================================================
+   RESPONSIVE COLLAPSE BREAKPOINTS
+   ============================================================================ */
+
+/* Tier 1: Medium Windows (<= 960px) - Collapse text labels to icon buttons */
+@media (max-width: 960px) {
+  .floating-toolbar {
+    gap: 6px;
+    padding: 6px 12px;
+  }
+
+  .button-text-label {
+    display: none !important;
+  }
+
+  .pill-btn,
+  .folder-btn {
+    min-width: 38px !important;
+    width: 38px !important;
+    height: 38px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    justify-content: center;
+  }
+
+  .pill-btn .MuiButton-startIcon,
+  .folder-btn .MuiButton-startIcon {
+    margin: 0 !important;
+  }
+
+  .filename-container {
+    max-width: 120px;
+  }
+}
+
+/* Tier 2: Small Windows / Tablets (<= 720px) - Hide lowest priority items */
+@media (max-width: 720px) {
+  .filename-container {
+    display: none !important; /* Hide file path tag */
+  }
+
+  .duration-slider {
+    display: none !important; /* Hide duration slider bar */
+  }
+}
+
+/* Tier 3: Compact Windows (<= 520px) - Ultra-minimal controls */
+@media (max-width: 520px) {
+  .step-btn,
+  .interval-label {
+    display: none !important; /* Hide interval step adjustments */
+  }
+}
+
+/* Tier 4: Mobile Displays (<= 420px) - Optimized mobile view */
+@media (max-width: 420px) {
+  .floating-toolbar {
+    bottom: 16px;
+    padding: 4px 8px;
+    gap: 4px;
+    max-width: calc(100vw - 16px);
+    border-radius: 20px;
+  }
+
+  /* Compact touch targets for smaller screen widths */
+  .floating-toolbar .MuiIconButton-root,
+  .pill-btn,
+  .folder-btn {
+    width: 34px !important;
+    height: 34px !important;
+    padding: 4px !important;
+  }
+
+  .floating-toolbar .MuiSvgIcon-root {
+    font-size: 1.15rem !important;
+  }
+}
+
+/* ============================================================================
+   6. SIDE PANELS & OVERLAYS
+   Styling for drawers, modal popups, custom scrollbars, and playlist items.
+   ============================================================================ */
+
+/* Playlist Drawer Paper Override */
+.MuiDrawer-paper {
+  background-color: rgba(20, 21, 25, 0.95) !important;
+  backdrop-filter: blur(12px);
+  border-left: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Playlist Action Buttons */
+.drawer-action-btn {
+  border-radius: 20px !important;
+  text-transform: none !important;
+  font-weight: 500 !important;
+}
+
+/* Custom Scrollbar for Drawer & Overflow Containers */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* Tooltip Custom Adjustments */
+.MuiTooltip-tooltip {
+  background-color: rgba(30, 31, 35, 0.95) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 8px !important;
+  font-size: 0.78rem !important;
 }

@@ -20,8 +20,8 @@ import {
 } from '@mui/material';
 
 // ============================================================================
-// ICON IMPORTS
-// Add new Material-UI icons here as needed for future toolbar/UI actions.
+// 1. ICON IMPORTS
+// Add new Material icons here for additional toolbar or panel actions.
 // ============================================================================
 import {
   PlayArrow,
@@ -30,6 +30,7 @@ import {
   SkipPrevious,
   Shuffle,
   FolderOpen,
+  FolderSpecial,
   Fullscreen,
   FullscreenExit,
   AutoAwesome,
@@ -46,8 +47,8 @@ import {
 } from '@mui/icons-material';
 
 // ============================================================================
-// WAILS BACKEND BINDINGS
-// Import any newly added Go methods from the generated Wails bindings here.
+// 2. WAILS BACKEND BINDINGS
+// Backend Go function imports for file I/O and window controls.
 // ============================================================================
 import {
   SelectDirectory,
@@ -58,7 +59,7 @@ import {
 } from '../wailsjs/go/main/App';
 import './App.css';
 
-// Custom dark theme configuration
+// Material-UI Dark Theme Configuration
 const muiTheme = createTheme({
   palette: {
     mode: 'dark',
@@ -69,16 +70,14 @@ const muiTheme = createTheme({
   shape: { borderRadius: 28 },
 });
 
-// ============================================================================
-// UTILITY FUNCTIONS
-// Add client-side data transformation or sorting helpers here.
-// ============================================================================
+// Helper: Natural alphanumeric sort for file paths
 const naturalSortPaths = (paths) => {
   return [...paths].sort((a, b) =>
     a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
   );
 };
 
+// Helper: Fisher-Yates shuffle sequence generator
 const createShuffleSequence = (length, pinOriginalIndex = -1) => {
   const indices = Array.from({ length }, (_, i) => i);
   for (let i = indices.length - 1; i > 0; i--) {
@@ -98,10 +97,9 @@ const createShuffleSequence = (length, pinOriginalIndex = -1) => {
 
 export default function App() {
   // ==========================================================================
-  // STATE DEFINITIONS
-  // Place new application states or toggle flags in this section.
+  // 3. STATE DEFINITIONS
   // ==========================================================================
-  const [playlistDirectories, setPlaylistDirectories] = useState([]); // Array of { dirPath, images }
+  const [playlistDirectories, setPlaylistDirectories] = useState([]);
   const [rawPaths, setRawPaths] = useState([]);
   const [isShuffle, setIsShuffle] = useState(false);
   const [playOrder, setPlayOrder] = useState([]);
@@ -115,16 +113,14 @@ export default function App() {
   const [transitionsEnabled, setTransitionsEnabled] = useState(true);
   const [imgKey, setImgKey] = useState(0);
 
-  // Panel & Toolbar Visibility States
+  // Panel & UI Visibility Controls
   const [isPlaylistOpen, setIsPlaylistOpen] = useState(false);
-  const [isPinned, setIsPinned] = useState(false); // Pin toolbar always visible
-
+  const [isPinned, setIsPinned] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isControlsVisible, setIsControlsVisible] = useState(true);
   const [isToolbarHovered, setIsToolbarHovered] = useState(false);
   const [isWindowFocused, setIsWindowFocused] = useState(true);
 
-  // Refs for tracking timer callbacks and fullscreen status across listeners
   const idleTimerRef = useRef(null);
   const isToolbarHoveredRef = useRef(false);
   const isFullscreenRef = useRef(false);
@@ -138,8 +134,7 @@ export default function App() {
   }, [isFullscreen]);
 
   // ==========================================================================
-  // PLAYLIST & DIRECTORY HANDLERS
-  // Add playlist management methods or collection handlers here.
+  // 4. PLAYLIST & DIRECTORY MANAGEMENT
   // ==========================================================================
   const rebuildCombinedPlaylist = useCallback((directories, shuffleMode) => {
     let combined = [];
@@ -204,14 +199,12 @@ export default function App() {
     }
   };
 
-  // Currently displayed image calculations
   const currentOriginalIndex = playOrder.length > 0 ? playOrder[playIndex] : 0;
   const currentFilePath = rawPaths[currentOriginalIndex] || '';
   const currentFileName = currentFilePath ? currentFilePath.split(/[/\\]/).pop() : '';
 
   // ==========================================================================
-  // UI & TOOLBAR VISIBILITY LOGIC
-  // Customize auto-hide delays, window focus triggers, or pinning logic here.
+  // 5. UI VISIBILITY & CURSOR AUTO-HIDE LOGIC
   // ==========================================================================
   useEffect(() => {
     const handleFocus = () => setIsWindowFocused(true);
@@ -266,7 +259,7 @@ export default function App() {
     }
   };
 
-  // Load image binary content on path change
+  // Image loading side effect
   useEffect(() => {
     if (!currentFilePath) return;
 
@@ -292,8 +285,7 @@ export default function App() {
   }, [currentFilePath]);
 
   // ==========================================================================
-  // NAVIGATION & CONTROL HANDLERS
-  // Add slideshow navigation rules or playback features here.
+  // 6. PLAYBACK CONTROLS & KEYBOARD SHORTCUTS
   // ==========================================================================
   const handleToggleShuffle = useCallback(() => {
     if (rawPaths.length === 0) return;
@@ -345,7 +337,7 @@ export default function App() {
     setIntervalSec((prev) => Math.min(60, prev + 1));
   }, []);
 
-  // Automatic slide advancement timer
+  // Slideshow auto-advance timer
   useEffect(() => {
     let timer;
     if (isPlaying && rawPaths.length > 0) {
@@ -354,10 +346,7 @@ export default function App() {
     return () => clearInterval(timer);
   }, [isPlaying, intervalSec, rawPaths.length, handleNext]);
 
-  // ==========================================================================
-  // KEYBOARD SHORTCUTS
-  // Map new keyboard hotkeys to actions in this keydown listener.
-  // ==========================================================================
+  // Global keyboard listeners
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'ArrowRight') handleNext();
@@ -372,12 +361,8 @@ export default function App() {
         setIsFullscreen(false);
       }
       if (e.key === 's' || e.key === 'S') handleToggleShuffle();
-      if (e.key === 't' || e.key === 'T') {
-        setTransitionsEnabled((prev) => !prev);
-      }
-      if (e.key === 'v' || e.key === 'V') {
-        setIsPinned((prev) => !prev); // Shortcut to pin/unpin toolbar
-      }
+      if (e.key === 't' || e.key === 'T') setTransitionsEnabled((prev) => !prev);
+      if (e.key === 'v' || e.key === 'V') setIsPinned((prev) => !prev);
       if (e.key === '+' || e.key === '=' || e.key === 'ArrowUp') {
         e.preventDefault();
         handleIncreaseInterval();
@@ -398,8 +383,8 @@ export default function App() {
     handleDecreaseInterval,
   ]);
 
-  // Evaluate whether toolbar should display based on pin state or user interaction
-  const shouldDisplayToolbar = isPinned || (isWindowFocused && (isControlsVisible || isToolbarHovered));
+  const shouldDisplayToolbar =
+    isPinned || (isWindowFocused && (isControlsVisible || isToolbarHovered));
 
   return (
     <ThemeProvider theme={muiTheme}>
@@ -409,7 +394,7 @@ export default function App() {
         className={`app-container ${!shouldDisplayToolbar ? 'cursor-hidden' : ''}`}
       >
         {/* ================================================================== */}
-        {/* MAIN IMAGE VIEWPORT */}
+        {/* 7. MAIN VIEWPORT (IMAGE OR UNIFIED START BUTTON) */}
         {/* ================================================================== */}
         <Box className="main-viewport">
           {loading && <CircularProgress className="loading-spinner" />}
@@ -422,33 +407,23 @@ export default function App() {
               className={`slideshow-image ${transitionsEnabled ? 'fade-active' : ''}`}
             />
           ) : (
-            <Box style={{ display: 'flex', gap: '16px' }}>
+            <Box className="empty-state-container">
               <Button
                 variant="contained"
-                startIcon={<FolderOpen />}
+                color="primary"
+                size="large"
+                startIcon={<PlayArrow fontSize="large" />}
                 onClick={handleLoadSingleFolder}
-                size="large"
-                className="select-folder-btn"
+                className="start-slideshow-btn"
               >
-                Open Single Directory
-              </Button>
-              <Button
-                variant="contained"
-                color="secondary"
-                startIcon={<Queue />}
-                onClick={handleAddDirectory}
-                size="large"
-                className="select-folder-btn"
-              >
-                Add Folder to Playlist
+                Start Slideshow
               </Button>
             </Box>
           )}
         </Box>
 
         {/* ================================================================== */}
-        {/* FLOATING CONTROL TOOLBAR */}
-        {/* Place new floating toolbar buttons or controls inside this element */}
+        {/* 8. FLOATING CONTROL TOOLBAR */}
         {/* ================================================================== */}
         <Paper
           elevation={0}
@@ -456,15 +431,15 @@ export default function App() {
           onMouseLeave={handleToolbarMouseLeave}
           className={`floating-toolbar ${shouldDisplayToolbar ? 'visible' : 'hidden'}`}
         >
-          {/* Directory & Playlist Openers */}
-          <Tooltip title="Open Single Folder">
+          {/* Open Library Button */}
+          <Tooltip title="Open Image Library">
             <Button
               variant="contained"
-              startIcon={<FolderOpen />}
+              startIcon={<FolderSpecial />}
               onClick={handleLoadSingleFolder}
               className="folder-btn"
             >
-              Folder
+              <span className="button-text-label">Open Library</span>
             </Button>
           </Tooltip>
 
@@ -484,7 +459,7 @@ export default function App() {
             </IconButton>
           </Tooltip>
 
-          {/* Pin Toolbar Always Visible Toggle */}
+          {/* Pin Toolbar Toggle */}
           <Tooltip title={isPinned ? 'Unpin Toolbar (V)' : 'Pin Toolbar Always Visible (V)'}>
             <IconButton
               onClick={() => setIsPinned((prev) => !prev)}
@@ -526,7 +501,7 @@ export default function App() {
             </Tooltip>
           </Box>
 
-          {/* Playback Mode Toggles */}
+          {/* Shuffle Button */}
           <Tooltip title={isShuffle ? 'Shuffle Mode: ON (S)' : 'Sequential Mode (S)'}>
             <Button
               variant={isShuffle ? 'contained' : 'outlined'}
@@ -536,25 +511,23 @@ export default function App() {
               disabled={!rawPaths.length}
               className="pill-btn"
             >
-              Shuffle {isShuffle ? 'ON' : 'OFF'}
+              <span className="button-text-label">Shuffle {isShuffle ? 'ON' : 'OFF'}</span>
             </Button>
           </Tooltip>
 
-          <Tooltip title="Toggle Fade Transitions (T)">
-            <Button
-              variant={transitionsEnabled ? 'contained' : 'outlined'}
-              color={transitionsEnabled ? 'primary' : 'inherit'}
-              startIcon={transitionsEnabled ? <AutoAwesome /> : <MotionPhotosOff />}
+          {/* Transition Toggle */}
+          <Tooltip title={transitionsEnabled ? 'Disable Fade Transition (T)' : 'Enable Fade Transition (T)'}>
+            <IconButton
               onClick={() => setTransitionsEnabled((prev) => !prev)}
-              className="pill-btn"
+              color={transitionsEnabled ? 'primary' : 'default'}
             >
-              Transitions {transitionsEnabled ? 'ON' : 'OFF'}
-            </Button>
+              {transitionsEnabled ? <AutoAwesome /> : <MotionPhotosOff />}
+            </IconButton>
           </Tooltip>
 
-          {/* Duration Interval Controls */}
+          {/* Interval Duration Controls */}
           <Box className="control-group">
-            <Tooltip title="Decrease interval by 1s (- / Down Arrow)">
+            <Tooltip title="Decrease interval (- / Down Arrow)">
               <span>
                 <IconButton
                   size="small"
@@ -571,7 +544,7 @@ export default function App() {
               {intervalSec}s
             </Typography>
 
-            <Tooltip title="Increase interval by 1s (+ / Up Arrow)">
+            <Tooltip title="Increase interval (+ / Up Arrow)">
               <span>
                 <IconButton
                   size="small"
@@ -594,14 +567,14 @@ export default function App() {
             />
           </Box>
 
-          {/* Fullscreen Mode Action */}
+          {/* Fullscreen Toggle */}
           <Tooltip title="Toggle Fullscreen (F / Esc)">
             <IconButton onClick={handleToggleFullscreen} className="icon-action-btn">
               {isFullscreen ? <FullscreenExit /> : <Fullscreen />}
             </IconButton>
           </Tooltip>
 
-          {/* File Name & Path Info */}
+          {/* File Name & Path Info Pill */}
           {rawPaths.length > 0 && (
             <Box className="filename-container">
               <Tooltip title={currentFilePath} arrow placement="top">
@@ -625,14 +598,9 @@ export default function App() {
         </Paper>
 
         {/* ================================================================== */}
-        {/* PLAYLIST DRAWER PANEL */}
-        {/* Place drawer items or list actions in this section */}
+        {/* 9. PLAYLIST DRAWER PANEL */}
         {/* ================================================================== */}
-        <Drawer
-          anchor="right"
-          open={isPlaylistOpen}
-          onClose={() => setIsPlaylistOpen(false)}
-        >
+        <Drawer anchor="right" open={isPlaylistOpen} onClose={() => setIsPlaylistOpen(false)}>
           <Box style={{ width: 320, padding: '16px' }}>
             <Typography variant="h6" gutterBottom>
               Playlist Manager
@@ -641,13 +609,13 @@ export default function App() {
               Total Images Loaded: {rawPaths.length}
             </Typography>
 
-            {/* Playlist Actions */}
             <Box style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
               <Button
                 variant="contained"
                 fullWidth
                 startIcon={<Queue />}
                 onClick={handleAddDirectory}
+                className="drawer-action-btn"
               >
                 Add
               </Button>
@@ -658,6 +626,7 @@ export default function App() {
                 startIcon={<Delete />}
                 onClick={handleClearPlaylist}
                 disabled={playlistDirectories.length === 0}
+                className="drawer-action-btn"
               >
                 Clear
               </Button>
@@ -665,7 +634,6 @@ export default function App() {
 
             <Divider />
 
-            {/* Directory List */}
             <List>
               {playlistDirectories.map((item, index) => (
                 <ListItem key={index}>
@@ -674,10 +642,7 @@ export default function App() {
                     secondary={`${item.images.length} images`}
                   />
                   <ListItemSecondaryAction>
-                    <IconButton
-                      edge="end"
-                      onClick={() => handleRemoveDirectory(index)}
-                    >
+                    <IconButton edge="end" onClick={() => handleRemoveDirectory(index)}>
                       <Delete />
                     </IconButton>
                   </ListItemSecondaryAction>
