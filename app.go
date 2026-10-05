@@ -4,150 +4,82 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"mime"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
-	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// ============================================================================
-// DATA STRUCTURES & APP SETUP
-// Add new Go struct definitions or backend state here.
-// ============================================================================
+const UntaggedTag = "untagged"
 
-// DirectoryResult holds directory paths and their scanned image file lists.
-type DirectoryResult struct {
+// DirectoryImages represents a directory and its scanned image paths.
+type DirectoryImages struct {
 	DirPath string   `json:"dirPath"`
 	Images  []string `json:"images"`
 }
 
+// App struct
 type App struct {
-	ctx context.Context
+	ctx          context.Context
+	mu           sync.RWMutex
+	likedImages  map[string]bool     // filePath -> bool
+	imageTags    map[string][]string // filePath -> []tags
+	allKnownTags map[string]bool     // global set of all tags created
 }
 
+// NewApp creates a new App application struct
 func NewApp() *App {
-	return &App{}
+	app := &App{
+		likedImages:  make(map[string]bool),
+		imageTags:    make(map[string][]string),
+		allKnownTags: make(map[string]bool),
+	}
+	app.allKnownTags[UntaggedTag] = true
+	return app
 }
 
+// startup is called when the app starts. The context is saved
+// so we can call the runtime methods.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 }
 
-// ============================================================================
-// HELPER FUNCTIONS (SORTING & FILE SYSTEM SCANNING)
-// Add custom file-parsing, sorting algorithms, or OS helpers here.
-// ============================================================================
-
-// naturalLess compares two strings using natural numerical sorting order (e.g. "image2" before "image10")
-func naturalLess(s1, s2 string) bool {
-	re := regexp.MustCompile(`(\d+|\D+)`)
-	chunks1 := re.FindAllString(s1, -1)
-	chunks2 := re.FindAllString(s2, -1)
-
-	minLen := len(chunks1)
-	if len(chunks2) < minLen {
-		minLen = len(chunks2)
-	}
-
-	for i := 0; i < minLen; i++ {
-		c1, c2 := chunks1[i], chunks2[i]
-
-		n1, err1 := strconv.Atoi(c1)
-		n2, err2 := strconv.Atoi(c2)
-
-		if err1 == nil && err2 == nil {
-			if n1 != n2 {
-				return n1 < n2
-			}
-		} else {
-			if strings.ToLower(c1) != strings.ToLower(c2) {
-				return strings.ToLower(c1) < strings.ToLower(c2)
-			}
-		}
-	}
-
-	return len(chunks1) < len(chunks2)
-}
-
-// scanDirectory recursively walks through a directory to gather supported image paths
-func (a *App) scanDirectory(dir string) ([]string, error) {
-	var imagePaths []string
-	validExts := map[string]bool{
-		".jpg":  true,
-		".jpeg": true,
-		".png":  true,
-		".webp": true,
-		".gif":  true,
-		".bmp":  true,
-	}
-
-	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return nil
-		}
-		if !d.IsDir() {
-			ext := strings.ToLower(filepath.Ext(d.Name()))
-			if validExts[ext] {
-				imagePaths = append(imagePaths, path)
-			}
-		}
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	sort.Slice(imagePaths, func(i, j int) bool {
-		return naturalLess(imagePaths[i], imagePaths[j])
-	})
-
-	return imagePaths, nil
-}
-
-// ============================================================================
-// WAILS EXPOSED METHODS (FRONTEND API CALLS)
-// Add new Go methods here that you want to bind and call in React/JavaScript.
-// ============================================================================
-
-// SelectDirectory opens a directory picker and returns all found images in natural sort order
+// SelectDirectory opens a directory dialog and returns all supported image files recursively.
 func (a *App) SelectDirectory() ([]string, error) {
 	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Select Folder with Images",
+		Title: "Select Image Directory",
 	})
 	if err != nil || dir == "" {
 		return nil, err
 	}
 
-	return a.scanDirectory(dir)
+	return scanImages(dir)
 }
 
-// AddDirectoryToPlaylist opens a directory picker and returns structured path + image results
-func (a *App) AddDirectoryToPlaylist() (*DirectoryResult, error) {
+// AddDirectoryToPlaylist opens a directory dialog and returns the directory path and its images.
+func (a *App) AddDirectoryToPlaylist() (*DirectoryImages, error) {
 	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Add Folder to Playlist",
+		Title: "Add Directory to Playlist",
 	})
 	if err != nil || dir == "" {
 		return nil, err
 	}
 
-	images, err := a.scanDirectory(dir)
+	images, err := scanImages(dir)
 	if err != nil {
 		return nil, err
 	}
 
-	return &DirectoryResult{
+	return &DirectoryImages{
 		DirPath: dir,
 		Images:  images,
 	}, nil
 }
 
-// ReadImage reads a file from disk and encodes it into a Base64 Data URI
+// ReadImage reads a file from disk and returns it as a Base64 data URL.
 func (a *App) ReadImage(filePath string) (string, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
@@ -155,27 +87,23 @@ func (a *App) ReadImage(filePath string) (string, error) {
 	}
 
 	ext := strings.ToLower(filepath.Ext(filePath))
-	mimeType := mime.TypeByExtension(ext)
-	if mimeType == "" {
-		switch ext {
-		case ".png":
-			mimeType = "image/png"
-		case ".webp":
-			mimeType = "image/webp"
-		case ".gif":
-			mimeType = "image/gif"
-		case ".bmp":
-			mimeType = "image/bmp"
-		default:
-			mimeType = "image/jpeg"
-		}
+	mimeType := "image/jpeg"
+	switch ext {
+	case ".png":
+		mimeType = "image/png"
+	case ".gif":
+		mimeType = "image/gif"
+	case ".webp":
+		mimeType = "image/webp"
+	case ".bmp":
+		mimeType = "image/bmp"
 	}
 
 	encoded := base64.StdEncoding.EncodeToString(data)
 	return fmt.Sprintf("data:%s;base64,%s", mimeType, encoded), nil
 }
 
-// ToggleFullscreen toggles the main window fullscreen state
+// ToggleFullscreen toggles window fullscreen state.
 func (a *App) ToggleFullscreen() {
 	if runtime.WindowIsFullscreen(a.ctx) {
 		runtime.WindowUnfullscreen(a.ctx)
@@ -184,7 +112,133 @@ func (a *App) ToggleFullscreen() {
 	}
 }
 
-// ExitFullscreen forces the window out of fullscreen mode
+// ExitFullscreen exits fullscreen mode.
 func (a *App) ExitFullscreen() {
 	runtime.WindowUnfullscreen(a.ctx)
+}
+
+// ============================================================================
+// FAVORITES & TAGGING BACKEND BINDINGS
+// ============================================================================
+
+// ToggleLikeImage toggles the favorite state of a given image file.
+func (a *App) ToggleLikeImage(filePath string) (bool, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	current := a.likedImages[filePath]
+	a.likedImages[filePath] = !current
+	return !current, nil
+}
+
+// IsLiked returns whether an image is marked as a favorite.
+func (a *App) IsLiked(filePath string) (bool, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	return a.likedImages[filePath], nil
+}
+
+// GetTags returns the tags assigned to a specific image file. Returns ["untagged"] if none exist.
+func (a *App) GetTags(filePath string) ([]string, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	tags := a.imageTags[filePath]
+	if len(tags) == 0 {
+		return []string{UntaggedTag}, nil
+	}
+	return tags, nil
+}
+
+// AddTag assigns a new tag to a specific image file.
+// If a custom tag is added, the default "untagged" tag is automatically removed.
+func (a *App) AddTag(filePath string, tag string) ([]string, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return a.getTagsLocked(filePath), nil
+	}
+
+	// Add tag to global tag store
+	a.allKnownTags[strings.ToLower(tag)] = true
+
+	existing := a.imageTags[filePath]
+	var cleaned []string
+
+	if strings.EqualFold(tag, UntaggedTag) {
+		// Adding "untagged" resets custom tags
+		a.imageTags[filePath] = []string{UntaggedTag}
+		return a.imageTags[filePath], nil
+	}
+
+	// Remove "untagged" tag if it exists when adding a real tag
+	for _, t := range existing {
+		if !strings.EqualFold(t, UntaggedTag) {
+			cleaned = append(cleaned, t)
+		}
+	}
+
+	// Check for duplicates
+	for _, t := range cleaned {
+		if strings.EqualFold(t, tag) {
+			a.imageTags[filePath] = cleaned
+			return cleaned, nil
+		}
+	}
+
+	updated := append(cleaned, tag)
+	a.imageTags[filePath] = updated
+	return updated, nil
+}
+
+// GetAllTags returns a list of all unique tags ever created in the application.
+func (a *App) GetAllTags() ([]string, error) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	tags := make([]string, 0, len(a.allKnownTags))
+	for tag := range a.allKnownTags {
+		tags = append(tags, tag)
+	}
+	sort.Strings(tags)
+	return tags, nil
+}
+
+func (a *App) getTagsLocked(filePath string) []string {
+	tags := a.imageTags[filePath]
+	if len(tags) == 0 {
+		return []string{UntaggedTag}
+	}
+	return tags
+}
+
+// Helper: Recursive scanning for image formats
+func scanImages(dir string) ([]string, error) {
+	var images []string
+	supportedExts := map[string]bool{
+		".jpg":  true,
+		".jpeg": true,
+		".png":  true,
+		".webp": true,
+		".gif":  true,
+		".bmp":  true,
+	}
+
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			ext := strings.ToLower(filepath.Ext(path))
+			if supportedExts[ext] {
+				images = append(images, path)
+			}
+		}
+		return nil
+	})
+
+	return images, err
 }

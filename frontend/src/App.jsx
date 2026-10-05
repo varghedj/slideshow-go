@@ -17,11 +17,17 @@ import {
   ListItemText,
   ListItemSecondaryAction,
   Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  TextField,
+  Chip,
+  Stack,
+  Badge,
 } from '@mui/material';
 
 // ============================================================================
 // 1. ICON IMPORTS
-// Add new Material icons here for additional toolbar or panel actions.
 // ============================================================================
 import {
   PlayArrow,
@@ -44,11 +50,14 @@ import {
   PlaylistPlay,
   PushPin,
   PushPinOutlined,
+  Favorite,
+  FavoriteBorder,
+  LocalOffer,
+  FilterList,
 } from '@mui/icons-material';
 
 // ============================================================================
 // 2. WAILS BACKEND BINDINGS
-// Backend Go function imports for file I/O and window controls.
 // ============================================================================
 import {
   SelectDirectory,
@@ -56,6 +65,11 @@ import {
   ReadImage,
   ToggleFullscreen,
   ExitFullscreen,
+  ToggleLikeImage,
+  IsLiked,
+  GetTags,
+  AddTag,
+  GetAllTags,
 } from '../wailsjs/go/main/App';
 import './App.css';
 
@@ -101,6 +115,7 @@ export default function App() {
   // ==========================================================================
   const [playlistDirectories, setPlaylistDirectories] = useState([]);
   const [rawPaths, setRawPaths] = useState([]);
+  const [filteredPaths, setFilteredPaths] = useState([]);
   const [isShuffle, setIsShuffle] = useState(false);
   const [playOrder, setPlayOrder] = useState([]);
   const [playIndex, setPlayIndex] = useState(0);
@@ -112,6 +127,17 @@ export default function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [transitionsEnabled, setTransitionsEnabled] = useState(true);
   const [imgKey, setImgKey] = useState(0);
+
+  // Favorites & Tagging State
+  const [isLikedState, setIsLikedState] = useState(false);
+  const [tags, setTags] = useState([]);
+  const [allKnownTags, setAllKnownTags] = useState(new Set(['untagged']));
+  const [tagInput, setTagInput] = useState('');
+  const [isTagDialogOpen, setIsTagDialogOpen] = useState(false);
+
+  // Filter State
+  const [selectedFilterTags, setSelectedFilterTags] = useState([]);
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
 
   // Panel & UI Visibility Controls
   const [isPlaylistOpen, setIsPlaylistOpen] = useState(false);
@@ -133,23 +159,66 @@ export default function App() {
     isFullscreenRef.current = isFullscreen;
   }, [isFullscreen]);
 
-  // ==========================================================================
-  // 4. PLAYLIST & DIRECTORY MANAGEMENT
-  // ==========================================================================
-  const rebuildCombinedPlaylist = useCallback((directories, shuffleMode) => {
-    let combined = [];
-    directories.forEach((dir) => {
-      combined = combined.concat(dir.images);
-    });
+  // Load persistent tag index from backend on startup
+  useEffect(() => {
+    GetAllTags()
+      .then((fetchedTags) => {
+        if (fetchedTags && fetchedTags.length > 0) {
+          setAllKnownTags(new Set([...fetchedTags, 'untagged']));
+        }
+      })
+      .catch((err) => console.error('Failed to load global tag index:', err));
+  }, []);
 
-    const sortedCombined = naturalSortPaths(combined);
-    setRawPaths(sortedCombined);
+  // Filter paths when rawPaths or selectedFilterTags change
+  useEffect(() => {
+    let isMounted = true;
 
-    if (sortedCombined.length > 0) {
-      if (shuffleMode) {
-        setPlayOrder(createShuffleSequence(sortedCombined.length, 0));
+    const applyFilters = async () => {
+      if (rawPaths.length === 0) {
+        if (isMounted) setFilteredPaths([]);
+        return;
+      }
+
+      if (selectedFilterTags.length === 0) {
+        if (isMounted) setFilteredPaths(rawPaths);
+        return;
+      }
+
+      const matching = [];
+      for (const filePath of rawPaths) {
+        try {
+          const imgTags = (await GetTags(filePath)) || ['untagged'];
+          const hasMatch = selectedFilterTags.some((filterTag) =>
+            imgTags.some((t) => t.toLowerCase() === filterTag.toLowerCase())
+          );
+          if (hasMatch) {
+            matching.push(filePath);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      if (isMounted) {
+        setFilteredPaths(matching);
+      }
+    };
+
+    applyFilters();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [rawPaths, selectedFilterTags]);
+
+  // Re-index play order when filteredPaths change
+  useEffect(() => {
+    if (filteredPaths.length > 0) {
+      if (isShuffle) {
+        setPlayOrder(createShuffleSequence(filteredPaths.length, 0));
       } else {
-        setPlayOrder(Array.from({ length: sortedCombined.length }, (_, i) => i));
+        setPlayOrder(Array.from({ length: filteredPaths.length }, (_, i) => i));
       }
       setPlayIndex(0);
     } else {
@@ -157,6 +226,19 @@ export default function App() {
       setPlayIndex(0);
       setCurrentSrc('');
     }
+  }, [filteredPaths, isShuffle]);
+
+  // ==========================================================================
+  // 4. PLAYLIST & DIRECTORY MANAGEMENT
+  // ==========================================================================
+  const rebuildCombinedPlaylist = useCallback((directories) => {
+    let combined = [];
+    directories.forEach((dir) => {
+      combined = combined.concat(dir.images);
+    });
+
+    const sortedCombined = naturalSortPaths(combined);
+    setRawPaths(sortedCombined);
   }, []);
 
   const handleAddDirectory = async () => {
@@ -165,7 +247,7 @@ export default function App() {
       if (res && res.images && res.images.length > 0) {
         const updated = [...playlistDirectories, res];
         setPlaylistDirectories(updated);
-        rebuildCombinedPlaylist(updated, isShuffle);
+        rebuildCombinedPlaylist(updated);
       }
     } catch (err) {
       console.error('Error adding directory:', err);
@@ -175,7 +257,7 @@ export default function App() {
   const handleRemoveDirectory = (indexToRemove) => {
     const updated = playlistDirectories.filter((_, idx) => idx !== indexToRemove);
     setPlaylistDirectories(updated);
-    rebuildCombinedPlaylist(updated, isShuffle);
+    rebuildCombinedPlaylist(updated);
   };
 
   const handleClearPlaylist = () => {
@@ -192,7 +274,7 @@ export default function App() {
       if (paths && paths.length > 0) {
         const singleDirEntry = [{ dirPath: 'Selected Directory', images: paths }];
         setPlaylistDirectories(singleDirEntry);
-        rebuildCombinedPlaylist(singleDirEntry, isShuffle);
+        rebuildCombinedPlaylist(singleDirEntry);
       }
     } catch (err) {
       console.error('Error opening folder:', err);
@@ -200,8 +282,69 @@ export default function App() {
   };
 
   const currentOriginalIndex = playOrder.length > 0 ? playOrder[playIndex] : 0;
-  const currentFilePath = rawPaths[currentOriginalIndex] || '';
+  const currentFilePath = filteredPaths[currentOriginalIndex] || '';
   const currentFileName = currentFilePath ? currentFilePath.split(/[/\\]/).pop() : '';
+
+  // Sync Favorites and Tags for active file
+  useEffect(() => {
+    if (!currentFilePath) {
+      setIsLikedState(false);
+      setTags([]);
+      return;
+    }
+
+    IsLiked(currentFilePath)
+      .then(setIsLikedState)
+      .catch(console.error);
+
+    GetTags(currentFilePath)
+      .then((fetchedTags) => {
+        const safeTags = fetchedTags || ['untagged'];
+        setTags(safeTags);
+        setAllKnownTags((prev) => {
+          const updated = new Set(prev);
+          safeTags.forEach((t) => updated.add(t));
+          return updated;
+        });
+      })
+      .catch(console.error);
+  }, [currentFilePath]);
+
+  const handleToggleLike = useCallback(async () => {
+    if (!currentFilePath) return;
+    try {
+      const likedStatus = await ToggleLikeImage(currentFilePath);
+      setIsLikedState(likedStatus);
+    } catch (err) {
+      console.error('Failed to toggle like:', err);
+    }
+  }, [currentFilePath]);
+
+  const handleAddTagByName = async (tagName) => {
+    const tagToUse = (tagName || tagInput).trim();
+    if (!tagToUse || !currentFilePath) return;
+
+    try {
+      const updatedTags = await AddTag(currentFilePath, tagToUse);
+      const safeTags = updatedTags || ['untagged'];
+      setTags(safeTags);
+      setTagInput('');
+      setAllKnownTags((prev) => new Set(prev).add(tagToUse));
+    } catch (err) {
+      console.error('Failed to add tag:', err);
+    }
+  };
+
+  const handleToggleFilterTag = (tag) => {
+    setSelectedFilterTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+  };
+
+  const handleToggleTagDialog = useCallback(() => {
+    if (!currentFilePath) return;
+    setIsTagDialogOpen((prev) => !prev);
+  }, [currentFilePath]);
 
   // ==========================================================================
   // 5. UI VISIBILITY & CURSOR AUTO-HIDE LOGIC
@@ -288,20 +431,20 @@ export default function App() {
   // 6. PLAYBACK CONTROLS & KEYBOARD SHORTCUTS
   // ==========================================================================
   const handleToggleShuffle = useCallback(() => {
-    if (rawPaths.length === 0) return;
+    if (filteredPaths.length === 0) return;
 
     if (!isShuffle) {
-      const newOrder = createShuffleSequence(rawPaths.length, currentOriginalIndex);
+      const newOrder = createShuffleSequence(filteredPaths.length, currentOriginalIndex);
       setPlayOrder(newOrder);
       setPlayIndex(0);
       setIsShuffle(true);
     } else {
-      const sequentialOrder = Array.from({ length: rawPaths.length }, (_, i) => i);
+      const sequentialOrder = Array.from({ length: filteredPaths.length }, (_, i) => i);
       setPlayOrder(sequentialOrder);
       setPlayIndex(currentOriginalIndex);
       setIsShuffle(false);
     }
-  }, [isShuffle, rawPaths.length, currentOriginalIndex]);
+  }, [isShuffle, filteredPaths.length, currentOriginalIndex]);
 
   const handleNext = useCallback(() => {
     if (playOrder.length === 0) return;
@@ -310,14 +453,14 @@ export default function App() {
       setPlayIndex((prev) => prev + 1);
     } else {
       if (isShuffle) {
-        const nextCycleOrder = createShuffleSequence(rawPaths.length);
+        const nextCycleOrder = createShuffleSequence(filteredPaths.length);
         setPlayOrder(nextCycleOrder);
         setPlayIndex(0);
       } else {
         setPlayIndex(0);
       }
     }
-  }, [playIndex, playOrder.length, isShuffle, rawPaths.length]);
+  }, [playIndex, playOrder.length, isShuffle, filteredPaths.length]);
 
   const handlePrev = useCallback(() => {
     if (playOrder.length === 0) return;
@@ -340,15 +483,17 @@ export default function App() {
   // Slideshow auto-advance timer
   useEffect(() => {
     let timer;
-    if (isPlaying && rawPaths.length > 0) {
+    if (isPlaying && filteredPaths.length > 0) {
       timer = setInterval(handleNext, intervalSec * 1000);
     }
     return () => clearInterval(timer);
-  }, [isPlaying, intervalSec, rawPaths.length, handleNext]);
+  }, [isPlaying, intervalSec, filteredPaths.length, handleNext]);
 
   // Global keyboard listeners
   useEffect(() => {
     const handleKeyDown = (e) => {
+      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+
       if (e.key === 'ArrowRight') handleNext();
       if (e.key === 'ArrowLeft') handlePrev();
       if (e.key === ' ') {
@@ -363,6 +508,8 @@ export default function App() {
       if (e.key === 's' || e.key === 'S') handleToggleShuffle();
       if (e.key === 't' || e.key === 'T') setTransitionsEnabled((prev) => !prev);
       if (e.key === 'v' || e.key === 'V') setIsPinned((prev) => !prev);
+      if (e.key === 'l' || e.key === 'L') handleToggleLike();
+      if (e.key === 'g' || e.key === 'G') handleToggleTagDialog();
       if (e.key === '+' || e.key === '=' || e.key === 'ArrowUp') {
         e.preventDefault();
         handleIncreaseInterval();
@@ -381,10 +528,16 @@ export default function App() {
     handleToggleShuffle,
     handleIncreaseInterval,
     handleDecreaseInterval,
+    handleToggleLike,
+    handleToggleTagDialog,
   ]);
 
   const shouldDisplayToolbar =
     isPinned || (isWindowFocused && (isControlsVisible || isToolbarHovered));
+
+  const availableSuggestedTags = Array.from(allKnownTags).filter(
+    (tag) => !tags.includes(tag)
+  );
 
   return (
     <ThemeProvider theme={muiTheme}>
@@ -399,7 +552,7 @@ export default function App() {
         <Box className="main-viewport">
           {loading && <CircularProgress className="loading-spinner" />}
 
-          {rawPaths.length > 0 ? (
+          {filteredPaths.length > 0 ? (
             <img
               key={transitionsEnabled ? `slide-${imgKey}` : 'static-slide'}
               src={currentSrc}
@@ -416,7 +569,7 @@ export default function App() {
                 onClick={handleLoadSingleFolder}
                 className="start-slideshow-btn"
               >
-                Start Slideshow
+                {rawPaths.length > 0 ? 'No Matching Filter Images' : 'Start Slideshow'}
               </Button>
             </Box>
           )}
@@ -459,6 +612,47 @@ export default function App() {
             </IconButton>
           </Tooltip>
 
+          {/* Filter Dialog Button */}
+          <Tooltip title="Filter Images by Tag">
+            <IconButton
+              onClick={() => setIsFilterDialogOpen(true)}
+              color={selectedFilterTags.length > 0 ? 'secondary' : 'default'}
+              className="icon-action-btn"
+            >
+              <Badge badgeContent={selectedFilterTags.length} color="secondary">
+                <FilterList />
+              </Badge>
+            </IconButton>
+          </Tooltip>
+
+          {/* Like / Favorite Button */}
+          <Tooltip title={isLikedState ? 'Unlike (Remove from Favorites)' : 'Like (Save to Favorites) (L)'}>
+            <span>
+              <IconButton
+                onClick={handleToggleLike}
+                disabled={!filteredPaths.length}
+                color={isLikedState ? 'error' : 'default'}
+                className="icon-action-btn"
+              >
+                {isLikedState ? <Favorite /> : <FavoriteBorder />}
+              </IconButton>
+            </span>
+          </Tooltip>
+
+          {/* Tag Manager Button */}
+          <Tooltip title="Manage Tags (G)">
+            <span>
+              <IconButton
+                onClick={handleToggleTagDialog}
+                disabled={!filteredPaths.length}
+                color={tags.length > 0 ? 'primary' : 'default'}
+                className="icon-action-btn"
+              >
+                <LocalOffer />
+              </IconButton>
+            </span>
+          </Tooltip>
+
           {/* Pin Toolbar Toggle */}
           <Tooltip title={isPinned ? 'Unpin Toolbar (V)' : 'Pin Toolbar Always Visible (V)'}>
             <IconButton
@@ -474,7 +668,7 @@ export default function App() {
           <Box className="control-group">
             <Tooltip title="Previous Image (Left Arrow)">
               <span>
-                <IconButton onClick={handlePrev} disabled={!rawPaths.length} className="nav-btn">
+                <IconButton onClick={handlePrev} disabled={!filteredPaths.length} className="nav-btn">
                   <SkipPrevious />
                 </IconButton>
               </span>
@@ -484,7 +678,7 @@ export default function App() {
               <span>
                 <IconButton
                   onClick={() => setIsPlaying(!isPlaying)}
-                  disabled={!rawPaths.length}
+                  disabled={!filteredPaths.length}
                   className="play-pause-btn"
                 >
                   {isPlaying ? <Pause /> : <PlayArrow />}
@@ -494,7 +688,7 @@ export default function App() {
 
             <Tooltip title="Next Image (Right Arrow)">
               <span>
-                <IconButton onClick={handleNext} disabled={!rawPaths.length} className="nav-btn">
+                <IconButton onClick={handleNext} disabled={!filteredPaths.length} className="nav-btn">
                   <SkipNext />
                 </IconButton>
               </span>
@@ -508,7 +702,7 @@ export default function App() {
               color={isShuffle ? 'secondary' : 'inherit'}
               startIcon={<Shuffle />}
               onClick={handleToggleShuffle}
-              disabled={!rawPaths.length}
+              disabled={!filteredPaths.length}
               className="pill-btn"
             >
               <span className="button-text-label">Shuffle {isShuffle ? 'ON' : 'OFF'}</span>
@@ -575,7 +769,7 @@ export default function App() {
           </Tooltip>
 
           {/* File Name & Path Info Pill */}
-          {rawPaths.length > 0 && (
+          {filteredPaths.length > 0 && (
             <Box className="filename-container">
               <Tooltip title={currentFilePath} arrow placement="top">
                 <Typography variant="body2" noWrap className="filename-text">
@@ -606,7 +800,7 @@ export default function App() {
               Playlist Manager
             </Typography>
             <Typography variant="body2" color="textSecondary" paragraph>
-              Total Images Loaded: {rawPaths.length}
+              Matching Images: {filteredPaths.length} / Total Loaded: {rawPaths.length}
             </Typography>
 
             <Box style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
@@ -651,7 +845,99 @@ export default function App() {
             </List>
           </Box>
         </Drawer>
+
+        {/* ================================================================== */}
+        {/* 10. TAG FILTER DIALOG */}
+        {/* ================================================================== */}
+        <Dialog open={isFilterDialogOpen} onClose={() => setIsFilterDialogOpen(false)} maxWidth="xs" fullWidth>
+          <DialogTitle>Filter Images by Tag</DialogTitle>
+          <DialogContent>
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              <Typography variant="body2" color="textSecondary">
+                Select tags to filter the current slideshow:
+              </Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                {Array.from(allKnownTags).map((tag) => {
+                  const isSelected = selectedFilterTags.includes(tag);
+                  return (
+                    <Chip
+                      key={tag}
+                      label={tag}
+                      color={isSelected ? 'secondary' : 'default'}
+                      variant={isSelected ? 'filled' : 'outlined'}
+                      onClick={() => handleToggleFilterTag(tag)}
+                      clickable
+                    />
+                  );
+                })}
+              </Stack>
+              {selectedFilterTags.length > 0 && (
+                <Button variant="text" color="error" onClick={() => setSelectedFilterTags([])}>
+                  Clear Filters
+                </Button>
+              )}
+            </Stack>
+          </DialogContent>
+        </Dialog>
+
+        {/* ================================================================== */}
+        {/* 11. TAG MANAGEMENT DIALOG */}
+        {/* ================================================================== */}
+        <Dialog open={isTagDialogOpen} onClose={() => setIsTagDialogOpen(false)} maxWidth="xs" fullWidth>
+          <DialogTitle>Image Tags</DialogTitle>
+          <DialogContent>
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              {/* Active Image Tags */}
+              <Typography variant="caption" color="textSecondary">
+                Assigned Tags
+              </Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                {tags.map((tag) => (
+                  <Chip key={tag} label={tag} color="primary" variant="filled" />
+                ))}
+              </Stack>
+
+              {/* Clickable Existing / Suggested Tags */}
+              {availableSuggestedTags.length > 0 && (
+                <>
+                  <Divider />
+                  <Typography variant="caption" color="textSecondary">
+                    Click an existing tag to add:
+                  </Typography>
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                    {availableSuggestedTags.map((tag) => (
+                      <Chip
+                        key={tag}
+                        label={`+ ${tag}`}
+                        variant="outlined"
+                        onClick={() => handleAddTagByName(tag)}
+                        clickable
+                      />
+                    ))}
+                  </Stack>
+                </>
+              )}
+
+              <Divider />
+
+              {/* Manual Input Field */}
+              <Stack direction="row" spacing={1}>
+                <TextField
+                  size="small"
+                  label="New Tag"
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddTagByName()}
+                  fullWidth
+                />
+                <Button variant="contained" onClick={() => handleAddTagByName()}>
+                  Add
+                </Button>
+              </Stack>
+            </Stack>
+          </DialogContent>
+        </Dialog>
       </Box>
     </ThemeProvider>
   );
-}
+}www

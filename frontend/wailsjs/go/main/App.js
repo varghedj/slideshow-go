@@ -6,8 +6,24 @@ export function AddDirectoryToPlaylist() {
   return window['go']['main']['App']['AddDirectoryToPlaylist']();
 }
 
+export function AddTag(arg1, arg2) {
+  return window['go']['main']['App']['AddTag'](arg1, arg2);
+}
+
 export function ExitFullscreen() {
   return window['go']['main']['App']['ExitFullscreen']();
+}
+
+export function GetAllTags() {
+  return window['go']['main']['App']['GetAllTags']();
+}
+
+export function GetTags(arg1) {
+  return window['go']['main']['App']['GetTags'](arg1);
+}
+
+export function IsLiked(arg1) {
+  return window['go']['main']['App']['IsLiked'](arg1);
 }
 
 export function ReadImage(arg1) {
@@ -20,4 +36,8 @@ export function SelectDirectory() {
 
 export function ToggleFullscreen() {
   return window['go']['main']['App']['ToggleFullscreen']();
+}
+
+export function ToggleLikeImage(arg1) {
+  return window['go']['main']['App']['ToggleLikeImage'](arg1);
 }

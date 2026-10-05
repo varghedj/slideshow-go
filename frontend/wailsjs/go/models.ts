@@ -1,11 +1,11 @@
 export namespace main {
 	
-	export class DirectoryResult {
+	export class DirectoryImages {
 	    dirPath: string;
 	    images: string[];
 	
 	    static createFrom(source: any = {}) {
-	        return new DirectoryResult(source);
+	        return new DirectoryImages(source);
 	    }
 	
 	    constructor(source: any = {}) {
