@@ -159,15 +159,17 @@ export default function App() {
     isFullscreenRef.current = isFullscreen;
   }, [isFullscreen]);
 
-  // Load persistent tag index from backend on startup
+  // FIX 1: Safely load persistent tag index from backend on startup
   useEffect(() => {
-    GetAllTags()
-      .then((fetchedTags) => {
-        if (fetchedTags && fetchedTags.length > 0) {
-          setAllKnownTags(new Set([...fetchedTags, 'untagged']));
-        }
-      })
-      .catch((err) => console.error('Failed to load global tag index:', err));
+    if (typeof GetAllTags === 'function') {
+      GetAllTags()
+        .then((fetchedTags) => {
+          if (fetchedTags && fetchedTags.length > 0) {
+            setAllKnownTags(new Set([...fetchedTags, 'untagged']));
+          }
+        })
+        .catch((err) => console.error('Failed to load global tag index:', err));
+    }
   }, []);
 
   // Filter paths when rawPaths or selectedFilterTags change
@@ -293,21 +295,25 @@ export default function App() {
       return;
     }
 
-    IsLiked(currentFilePath)
-      .then(setIsLikedState)
-      .catch(console.error);
+    if (typeof IsLiked === 'function') {
+      IsLiked(currentFilePath)
+        .then(setIsLikedState)
+        .catch(console.error);
+    }
 
-    GetTags(currentFilePath)
-      .then((fetchedTags) => {
-        const safeTags = fetchedTags || ['untagged'];
-        setTags(safeTags);
-        setAllKnownTags((prev) => {
-          const updated = new Set(prev);
-          safeTags.forEach((t) => updated.add(t));
-          return updated;
-        });
-      })
-      .catch(console.error);
+    if (typeof GetTags === 'function') {
+      GetTags(currentFilePath)
+        .then((fetchedTags) => {
+          const safeTags = fetchedTags || ['untagged'];
+          setTags(safeTags);
+          setAllKnownTags((prev) => {
+            const updated = new Set(prev);
+            safeTags.forEach((t) => updated.add(t));
+            return updated;
+          });
+        })
+        .catch(console.error);
+    }
   }, [currentFilePath]);
 
   const handleToggleLike = useCallback(async () => {
@@ -341,10 +347,10 @@ export default function App() {
     );
   };
 
+  // FIX 2: Removed dependency on currentFilePath so shortcut handlers remain stable
   const handleToggleTagDialog = useCallback(() => {
-    if (!currentFilePath) return;
     setIsTagDialogOpen((prev) => !prev);
-  }, [currentFilePath]);
+  }, []);
 
   // ==========================================================================
   // 5. UI VISIBILITY & CURSOR AUTO-HIDE LOGIC
@@ -409,18 +415,20 @@ export default function App() {
     let isMounted = true;
     setLoading(true);
 
-    ReadImage(currentFilePath)
-      .then((src) => {
-        if (isMounted) {
-          setCurrentSrc(src);
-          setLoading(false);
-          setImgKey((prev) => prev + 1);
-        }
-      })
-      .catch((err) => {
-        console.error('Failed to read image:', err);
-        if (isMounted) setLoading(false);
-      });
+    if (typeof ReadImage === 'function') {
+      ReadImage(currentFilePath)
+        .then((src) => {
+          if (isMounted) {
+            setCurrentSrc(src);
+            setLoading(false);
+            setImgKey((prev) => prev + 1);
+          }
+        })
+        .catch((err) => {
+          console.error('Failed to read image:', err);
+          if (isMounted) setLoading(false);
+        });
+    }
 
     return () => {
       isMounted = false;
@@ -430,21 +438,24 @@ export default function App() {
   // ==========================================================================
   // 6. PLAYBACK CONTROLS & KEYBOARD SHORTCUTS
   // ==========================================================================
+  // FIX 3: Calculate currentOrigIdx dynamically inside handleToggleShuffle
   const handleToggleShuffle = useCallback(() => {
     if (filteredPaths.length === 0) return;
 
+    const currentOrigIdx = playOrder.length > 0 ? playOrder[playIndex] : 0;
+
     if (!isShuffle) {
-      const newOrder = createShuffleSequence(filteredPaths.length, currentOriginalIndex);
+      const newOrder = createShuffleSequence(filteredPaths.length, currentOrigIdx);
       setPlayOrder(newOrder);
       setPlayIndex(0);
       setIsShuffle(true);
     } else {
       const sequentialOrder = Array.from({ length: filteredPaths.length }, (_, i) => i);
       setPlayOrder(sequentialOrder);
-      setPlayIndex(currentOriginalIndex);
+      setPlayIndex(currentOrigIdx);
       setIsShuffle(false);
     }
-  }, [isShuffle, filteredPaths.length, currentOriginalIndex]);
+  }, [isShuffle, filteredPaths.length, playOrder, playIndex]);
 
   const handleNext = useCallback(() => {
     if (playOrder.length === 0) return;
@@ -468,7 +479,9 @@ export default function App() {
   }, [playOrder.length]);
 
   const handleToggleFullscreen = () => {
-    ToggleFullscreen();
+    if (typeof ToggleFullscreen === 'function') {
+      ToggleFullscreen();
+    }
     setIsFullscreen((prev) => !prev);
   };
 
@@ -502,7 +515,9 @@ export default function App() {
       }
       if (e.key === 'f' || e.key === 'F') handleToggleFullscreen();
       if (e.key === 'Escape' && isFullscreenRef.current) {
-        ExitFullscreen();
+        if (typeof ExitFullscreen === 'function') {
+          ExitFullscreen();
+        }
         setIsFullscreen(false);
       }
       if (e.key === 's' || e.key === 'S') handleToggleShuffle();
@@ -940,4 +955,4 @@ export default function App() {
       </Box>
     </ThemeProvider>
   );
-}www
+}
